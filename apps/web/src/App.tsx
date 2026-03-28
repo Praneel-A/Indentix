@@ -433,45 +433,51 @@ function ScanScreen({ me: _me, onBack }: { me: User; onBack: () => void }) {
   const [scannedId, setScannedId] = useState("");
   const [result, setResult] = useState<User | null>(null);
   const [checked, setChecked] = useState(false);
+  const [sendAmount, setSendAmount] = useState("50000");
+  const [sent, setSent] = useState(false);
 
   const parseQrData = (raw: string): string => {
-    const urlMatch = raw.match(/\/verify\/([a-zA-Z0-9_]+)/);
-    if (urlMatch) return urlMatch[1];
-    try { const j = JSON.parse(raw); if (j.id) return j.id; } catch { /* not json */ }
+    const m = raw.match(/\/verify\/([a-zA-Z0-9_]+)/);
+    if (m) return m[1];
+    try { const j = JSON.parse(raw); if (j.id) return j.id; } catch { /* */ }
+    if (raw.startsWith("user_")) return raw;
     return raw;
   };
 
   const lookupId = async (uid: string) => {
-    setResult(null); setChecked(false); setScannedId(uid);
+    if (!uid.trim()) return;
+    setResult(null); setChecked(false); setSent(false); setScannedId(uid);
     const res = await api(`/user/${uid}`);
     const j = await res.json() as { user?: User };
     setResult(j.user ?? null);
     setChecked(true);
   };
 
-  const handleScan = (data: string) => {
+  const handleScan = useCallback((data: string) => {
     setScanning(false);
     const uid = parseQrData(data);
     void lookupId(uid);
-  };
+  }, []);
+
+  const isSafe = result && result.trustScore >= 50 && !result.revoked;
 
   return (
     <Shell>
       <BackButton onClick={onBack} />
-      <h2 className="text-xl font-bold text-[#003087] mb-1">Scan & Verify</h2>
-      <p className="text-sm text-slate-500 mb-4">Scan someone's QR code to check their identity.</p>
+      <h2 className="text-xl font-bold text-[#003087] mb-1">Scan & Pay</h2>
+      <p className="text-sm text-slate-500 mb-4">Scan a QR code to verify identity and send money.</p>
 
       {scanning ? (
         <QrScanner onScan={handleScan} onClose={() => setScanning(false)} />
-      ) : (
+      ) : !result ? (
         <div className="space-y-3">
-          <Button className="w-full h-12 bg-[#003087] hover:bg-[#002060]" onClick={() => setScanning(true)}>
-            <Camera className="w-5 h-5 mr-2" /> Open QR scanner
+          <Button className="w-full h-14 text-base bg-[#003087] hover:bg-[#002060]" onClick={() => { setResult(null); setChecked(false); setSent(false); setScanning(true); }}>
+            <Camera className="w-5 h-5 mr-2" /> Scan QR code
           </Button>
 
           <div className="relative flex items-center gap-3 my-1">
             <div className="flex-1 h-px bg-slate-200" />
-            <span className="text-xs text-slate-400">or enter ID manually</span>
+            <span className="text-xs text-slate-400">or enter user ID</span>
             <div className="flex-1 h-px bg-slate-200" />
           </div>
 
@@ -480,41 +486,86 @@ function ScanScreen({ me: _me, onBack }: { me: User; onBack: () => void }) {
             <Button className="h-11" variant="outline" onClick={() => void lookupId(scannedId)}>Check</Button>
           </div>
 
+          <p className="text-xs text-slate-400">Try these demo users:</p>
           <div className="flex flex-wrap gap-1.5">
-            {["user_real_agent", "user_fake_agent", "user_scammer", "user_praneel"].map((uid) => (
-              <Button key={uid} variant="outline" size="sm" onClick={() => void lookupId(uid)}>{uid.replace("user_", "")}</Button>
+            {[
+              { id: "user_real_agent", label: "Real Agent" },
+              { id: "user_fake_agent", label: "Fake Agent" },
+              { id: "user_scammer", label: "Scammer" },
+              { id: "user_praneel", label: "Praneel" },
+              { id: "user_juma", label: "Juma" },
+            ].map((u) => (
+              <Button key={u.id} variant="outline" size="sm" onClick={() => void lookupId(u.id)}>{u.label}</Button>
             ))}
           </div>
-        </div>
-      )}
 
-      {checked && !result && (
-        <div className="mt-4 rounded-xl bg-red-50 border border-red-200 p-6 text-center">
-          <ShieldAlert className="w-10 h-10 text-red-500 mx-auto" />
-          <p className="font-bold text-red-600 mt-2">NOT FOUND</p>
-          <p className="text-sm text-slate-500">Not registered. Do not trust.</p>
-        </div>
-      )}
-
-      {result && (
-        <div className={`mt-4 rounded-xl border-2 p-4 ${result.trustScore >= 50 && !result.revoked ? "border-green-300 bg-green-50" : "border-red-300 bg-red-50"}`}>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-bold text-lg">{result.name}</p>
-              <p className="text-xs text-slate-500">{result.phone}</p>
+          {checked && !result && (
+            <div className="rounded-xl bg-red-50 border border-red-200 p-6 text-center mt-2">
+              <ShieldAlert className="w-10 h-10 text-red-500 mx-auto" />
+              <p className="font-bold text-red-600 mt-2">NOT FOUND</p>
+              <p className="text-sm text-slate-500">Not registered. Do not trust this person.</p>
             </div>
-            <TrustRing score={result.trustScore} level={result.trustLevel} size={60} />
+          )}
+        </div>
+      ) : (
+        /* ── Scanned user profile + send money ── */
+        <div className="space-y-4">
+          <div className={`rounded-2xl border-2 p-5 ${isSafe ? "border-green-300 bg-green-50" : "border-red-300 bg-red-50"}`}>
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-white flex items-center justify-center text-lg font-bold text-[#003087] shadow-sm">
+                {result.name.split(" ").map(n => n[0]).join("")}
+              </div>
+              <div className="flex-1">
+                <p className="font-bold text-lg">{result.name}</p>
+                <p className="text-xs text-slate-500">{result.phone}</p>
+              </div>
+              <TrustRing score={result.trustScore} level={result.trustLevel} size={60} />
+            </div>
+
+            <div className="flex flex-wrap gap-1.5 mt-3">
+              {result.verified ? <Badge variant="success">Verified</Badge> : <Badge variant="warning">Unverified</Badge>}
+              {result.faceHash && <Badge variant="success">Face ID</Badge>}
+              {result.govIdUploaded && <Badge variant="success">Gov ID</Badge>}
+              {result.isAgent && result.verified && <Badge variant="success">Licensed Agent</Badge>}
+              {result.isAgent && !result.verified && <Badge variant="destructive">⚠ UNVERIFIED AGENT</Badge>}
+              {result.revoked && <Badge variant="destructive">REVOKED</Badge>}
+              {result.trustLevel === "SCAMMER" && <Badge variant="destructive">⚠ KNOWN SCAMMER</Badge>}
+            </div>
+
+            <div className={`mt-3 p-3 rounded-xl text-sm font-semibold ${isSafe ? "bg-white text-green-700" : "bg-white text-red-700"}`}>
+              {isSafe ? `✓ This ${result.isAgent ? "agent" : "person"} is trusted. Safe to transact.` : `⚠ Do NOT send money to this ${result.isAgent ? "agent" : "person"}.`}
+            </div>
           </div>
-          <div className="flex flex-wrap gap-1.5 mt-3">
-            {result.verified ? <Badge variant="success">Verified</Badge> : <Badge variant="warning">Unverified</Badge>}
-            {result.faceHash && <Badge variant="success">Face ID</Badge>}
-            {result.isAgent && result.verified && <Badge variant="success">Licensed Agent</Badge>}
-            {result.isAgent && !result.verified && <Badge variant="destructive">UNVERIFIED AGENT</Badge>}
-            {result.revoked && <Badge variant="destructive">REVOKED</Badge>}
-            {result.trustLevel === "SCAMMER" && <Badge variant="destructive">⚠ KNOWN SCAMMER</Badge>}
-          </div>
-          <div className={`mt-3 p-3 rounded-lg text-sm font-semibold ${result.trustScore >= 50 && !result.revoked ? "bg-white text-green-700" : "bg-white text-red-700"}`}>
-            {result.trustScore >= 50 && !result.revoked ? `✓ Safe to transact with this ${result.isAgent ? "agent" : "user"}` : `⚠ Do NOT transact with this ${result.isAgent ? "agent" : "user"}`}
+
+          {/* Send money section */}
+          {isSafe && !sent && (
+            <Card>
+              <CardContent className="pt-5 space-y-3">
+                <p className="text-sm font-semibold text-[#003087]">Send money to {result.name}</p>
+                <div>
+                  <label className="text-xs text-slate-500">Amount (TZS)</label>
+                  <Input className="h-12 text-2xl font-bold text-center mt-1" value={sendAmount} onChange={(e) => setSendAmount(e.target.value)} />
+                  <p className="text-xs text-slate-400 text-center mt-1">≈ ${(Number(sendAmount) / 2500).toFixed(2)} USD</p>
+                </div>
+                <Button className="w-full h-12 bg-[#003087] hover:bg-[#002060]" onClick={() => setSent(true)}>
+                  <Send className="w-4 h-4 mr-2" /> Send {Number(sendAmount).toLocaleString()} TZS
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {sent && (
+            <div className="rounded-2xl bg-green-50 border border-green-200 p-6 text-center">
+              <ShieldCheck className="w-12 h-12 text-green-500 mx-auto" />
+              <p className="font-bold text-lg mt-3">Payment sent!</p>
+              <p className="text-sm text-slate-500">{Number(sendAmount).toLocaleString()} TZS to {result.name}</p>
+              <p className="text-xs text-slate-400 mt-1">Transaction verified by Indentix</p>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => { setResult(null); setChecked(false); setSent(false); }}>Scan another</Button>
+            <Button variant="ghost" className="flex-1" onClick={onBack}>Back home</Button>
           </div>
         </div>
       )}
