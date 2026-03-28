@@ -10,14 +10,12 @@
   },
   "dependencies": {
     "@fastify/cors": "^10.0.2",
+    "@types/node": "^22.13.10",
     "fastify": "^5.2.1",
+    "typescript": "^5.8.2",
     "viem": "^2.23.2"
   },
   "devDependencies": {
-    "@types/node": "^22.13.10",
-    "typescript": "^5.8.2"
-  },
-  "optionalDependencies": {
     "esbuild": "^0.27.4",
     "tsx": "^4.19.3"
   }
