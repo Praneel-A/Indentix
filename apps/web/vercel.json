@@ -1,15 +1,15 @@
 {
   "rewrites": [
-    { "source": "/auth/:path*", "destination": "https://indentix-api.onrender.com/auth/:path*" },
-    { "source": "/user/:path*", "destination": "https://indentix-api.onrender.com/user/:path*" },
-    { "source": "/face/:path*", "destination": "https://indentix-api.onrender.com/face/:path*" },
-    { "source": "/lookup/:path*", "destination": "https://indentix-api.onrender.com/lookup/:path*" },
-    { "source": "/identity/:path*", "destination": "https://indentix-api.onrender.com/identity/:path*" },
-    { "source": "/payment/:path*", "destination": "https://indentix-api.onrender.com/payment/:path*" },
-    { "source": "/govid/:path*", "destination": "https://indentix-api.onrender.com/govid/:path*" },
-    { "source": "/onboarding/:path*", "destination": "https://indentix-api.onrender.com/onboarding/:path*" },
-    { "source": "/verify/:path*", "destination": "https://indentix-api.onrender.com/verify/:path*" },
-    { "source": "/demo/:path*", "destination": "https://indentix-api.onrender.com/demo/:path*" },
-    { "source": "/health", "destination": "https://indentix-api.onrender.com/health" }
+    { "source": "/auth/:path*", "destination": "https://indentix-api-production.up.railway.app/auth/:path*" },
+    { "source": "/user/:path*", "destination": "https://indentix-api-production.up.railway.app/user/:path*" },
+    { "source": "/face/:path*", "destination": "https://indentix-api-production.up.railway.app/face/:path*" },
+    { "source": "/lookup/:path*", "destination": "https://indentix-api-production.up.railway.app/lookup/:path*" },
+    { "source": "/identity/:path*", "destination": "https://indentix-api-production.up.railway.app/identity/:path*" },
+    { "source": "/payment/:path*", "destination": "https://indentix-api-production.up.railway.app/payment/:path*" },
+    { "source": "/govid/:path*", "destination": "https://indentix-api-production.up.railway.app/govid/:path*" },
+    { "source": "/onboarding/:path*", "destination": "https://indentix-api-production.up.railway.app/onboarding/:path*" },
+    { "source": "/verify/:path*", "destination": "https://indentix-api-production.up.railway.app/verify/:path*" },
+    { "source": "/demo/:path*", "destination": "https://indentix-api-production.up.railway.app/demo/:path*" },
+    { "source": "/health", "destination": "https://indentix-api-production.up.railway.app/health" }
   ]
 }
