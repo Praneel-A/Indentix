@@ -1,77 +1,98 @@
-# Indentix prototype
+# Indentix — Trusted Mobile Payments for Tanzania
 
-Portable trust layer prototype: **Polygon Amoy** smart contracts, **SIWE** auth, **KYC/CDD/EDD** orchestration with a **BullMQ** relayer, and a **Vite + wagmi** web app.
+> Stop fraud before money moves. Face verification, trust scores, and instant identity for mobile payments.
 
-## Repo layout
+## The Problem
 
-| Path | Purpose |
-|------|---------|
-| `contracts/` | `IdentityRegistry`, `AttestationHub` (Foundry) |
-| `apps/api/` | Fastify API, Prisma, Redis, webhooks, chain worker |
-| `apps/web/` | Wallet, SIWE, onboarding, mock KYC, read attestation |
+Tanzania's mobile money ecosystem (M-Pesa, Tigo Pesa) loses billions to:
+1. **Fake payment screenshots** — scammers show fabricated confirmations
+2. **Fake agents** — impersonators posing as licensed M-Pesa agents
+3. **SIM swap / phone theft** — stolen identities used for fraud
 
-## Prerequisites
+## The Solution
 
-- Node 20+
-- Docker (for Postgres + Redis)
-- [Foundry](https://book.getfoundry.sh/) (optional, for `forge build`)
+Indentix adds a **trust layer** on top of existing mobile payment systems:
 
-## Quick start
-
-### 1. Infra
-
-```bash
-docker compose up -d
+```
+┌─────────────┐     ┌──────────────┐     ┌────────────────┐
+│  Face ID    │────▶│  Trust Score │────▶│  Safe Payment  │
+│  (webcam)   │     │  (0-100)     │     │  (verified)    │
+└─────────────┘     └──────────────┘     └────────────────┘
+        │                   │                      │
+   5 samples           4 signals              QR verify
+   averaged         face + KYC +            agent + user
+   dedup check     agent + history         identity check
 ```
 
-### 2. Database
+## Features
+
+| Feature | What it does |
+|---------|-------------|
+| **Face ID** | Webcam enrollment (5 samples, averaged), duplicate detection, 1:1 verification |
+| **Trust Score** | 0–100 ring from 4 signals: face, verification status, agent license, history |
+| **Send Money** | Look up recipient trust BEFORE paying, verify payment confirmations |
+| **Scan QR** | Verify any agent or user — instantly see if they're trusted or flagged |
+| **Emergency Lock** | One-tap identity revocation + guided recovery |
+| **Demo Mode** | Pre-loaded users: trusted vendor, verified buyer, scammer, fake agent, real agent |
+
+## Quick Start (1 command)
 
 ```bash
-cp apps/api/.env.example apps/api/.env
-# Edit RELAYER_PRIVATE_KEY and ATTESTATION_HUB_ADDRESS after deploy
-cd apps/api && npx prisma db push
+npm install && npm run dev:api & npm run dev:web
 ```
 
-### 3. Contracts (Polygon Amoy)
+Then open **http://localhost:5173**.
 
-Deploy `AttestationHub` with constructor `(admin, issuer)`. For demos, use the same address as admin and set `issuer` to your **backend relayer** address (derived from `RELAYER_PRIVATE_KEY`).
+No Docker. No blockchain. No environment variables. Just `npm install` and go.
 
-```bash
-cd contracts && forge build
-# See contracts/README.md for forge create examples
+## Demo Script (2 minutes)
+
+1. **Open app** → click **Demo mode** → see 5 pre-loaded Tanzanian users
+2. **Login as Mama Anna** (trusted vendor, score 92)
+3. **Send Money** → enter scammer phone `+255700000000` → see RED warning
+4. **Send Money** → enter Juma's phone `+255787654321` → see GREEN trust, send safely
+5. **Scan QR** → tap "Fake Agent" → see UNVERIFIED AGENT warning
+6. **Scan QR** → tap "Real Agent" → see TRUSTED Licensed Agent
+7. **Enroll Face** → capture with webcam → trust score jumps
+8. **Emergency** → lock identity → account revoked → recover → re-enroll
+
+## Architecture
+
+```
+apps/
+  api/          Fastify server (in-memory store, no database)
+    src/
+      index.ts    All endpoints in one file
+      store.ts    In-memory user store with demo data
+      lib/face.ts Face comparison (Euclidean distance)
+  web/          Vite + React + shadcn/ui + Tailwind
+    src/
+      App.tsx     Mobile-first UI with 6 screens
+      components/
+        FaceScanner.tsx   CLEAR-style face enrollment/verification
+        ui/               shadcn components (Button, Card, Badge, etc.)
 ```
 
-Put the deployed `AttestationHub` address in `apps/api/.env` and `apps/web/.env`.
+## API Endpoints
 
-### 4. API
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/auth/login` | Login by phone number |
+| GET | `/user/:id` | Get user profile |
+| GET | `/lookup/phone/:phone` | Look up user by phone |
+| POST | `/face/enroll` | Enroll face (5 samples) |
+| POST | `/face/verify` | Verify face 1:1 |
+| POST | `/payment/verify` | Check if payment is real |
+| POST | `/identity/revoke` | Lock identity |
+| POST | `/identity/recover` | Recover identity |
+| GET | `/demo/users` | List all demo users |
 
-```bash
-cd apps/api && npm run dev
-```
+## Tech Stack
 
-### 5. Web
+- **Frontend**: React 19, Vite, Tailwind CSS 4, shadcn/ui, Lucide icons, face-api.js, qrcode.react
+- **Backend**: Fastify (Node.js), in-memory store, zero external dependencies
+- **Face ML**: @vladmandic/face-api (SSD MobileNet + 68-landmark + 128-d descriptor)
 
-```bash
-cp apps/web/.env.example apps/web/.env
-# Set VITE_ATTESTATION_HUB_ADDRESS
-cd apps/web && npm run dev
-```
+## Team
 
-Open [http://localhost:5173](http://localhost:5173). Connect MetaMask on **Polygon Amoy** (chain id `80002`), sign in with SIWE, start onboarding, then **Mock approve** (or call `POST /webhooks/kyc` with `X-Webhook-Secret` if set).
-
-## Flow
-
-1. User connects wallet and signs **SIWE** (`/auth/nonce`, `/auth/verify`).
-2. **Start KYC session** creates an `Applicant` with an external id (mock provider).
-3. Webhook or **`/dev/mock-kyc`** (non-production or `ALLOW_DEV_MOCK=true`) runs **CDD** (`assessCdd`) and optional **EDD** (high-risk countries).
-4. Relayer enqueues **`setAttestation`** on `AttestationHub` for `subjectId = keccak256("indentix:amoy:" + wallet)`.
-
-## Scripts (root)
-
-- `npm run dev:api` — API
-- `npm run dev:web` — Web
-- `npm run db:up` / `npm run db:down` — Docker Postgres/Redis
-
-## Compliance note
-
-This is a **prototype**. Production deployments need legal review for KYC/biometrics, issuer agreements, and data retention.
+**Team Vajran** · Built for Tanzania fintech hackathon

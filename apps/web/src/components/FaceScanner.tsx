@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import * as faceapi from "@vladmandic/face-api";
-import { apiFetch } from "../api";
+import { api } from "../api";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 
@@ -13,6 +13,7 @@ type Status = "init" | "ready" | "no-face" | "move-closer" | "hold-still" | "sca
 
 interface Props {
   mode: Mode;
+  userId?: string;
   onComplete: () => void;
   onClose: () => void;
 }
@@ -24,7 +25,7 @@ interface Result {
   hash?: string;
 }
 
-export function FaceScanner({ mode, onComplete, onClose }: Props) {
+export function FaceScanner({ mode, userId, onComplete, onClose }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const timerRef = useRef<number>(0);
@@ -82,16 +83,16 @@ export function FaceScanner({ mode, onComplete, onClose }: Props) {
       setProgress(Math.round(((i + 1) / ENROLL_SAMPLES) * 80));
     }
     setProgress(90);
-    const res = await apiFetch("/face/enroll", { method: "POST", body: JSON.stringify({ samples }) });
+    const res = await api("/face/enroll", { method: "POST", body: JSON.stringify({ userId, samples }) });
     const j = await res.json() as Record<string, unknown>;
     setProgress(100);
     if (!res.ok) {
       setResult({ success: false, title: "Enrollment blocked", detail: `${j.error ?? "Failed"}${j.distance != null ? ` (distance: ${j.distance})` : ""}` });
     } else {
-      setResult({ success: true, title: "Identity created", detail: `${j.samplesUsed ?? 3} samples captured`, hash: j.faceCommitmentHash as string | undefined });
+      setResult({ success: true, title: "Face ID created", detail: `${j.samplesUsed ?? 5} samples captured`, hash: j.faceHash as string | undefined });
       onComplete();
     }
-  }, [onComplete]);
+  }, [onComplete, userId]);
 
   const doVerify = useCallback(async (video: HTMLVideoElement) => {
     setProgress(50);
@@ -99,7 +100,7 @@ export function FaceScanner({ mode, onComplete, onClose }: Props) {
       .withFaceLandmarks().withFaceDescriptor();
     if (!d) return setResult({ success: false, title: "No face detected", detail: "Try again." });
     setProgress(80);
-    const res = await apiFetch("/face/verify", { method: "POST", body: JSON.stringify({ embedding: Array.from(d.descriptor) }) });
+    const res = await api("/face/verify", { method: "POST", body: JSON.stringify({ userId, embedding: Array.from(d.descriptor) }) });
     const j = await res.json() as Record<string, unknown>;
     setProgress(100);
 

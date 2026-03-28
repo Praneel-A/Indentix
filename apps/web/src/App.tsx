@@ -1,363 +1,460 @@
-import { useCallback, useEffect, useState } from "react";
-import { useAccount, useChainId, useConnect, useDisconnect, useReadContract, useSignMessage, useSwitchChain } from "wagmi";
-import { SiweMessage } from "siwe";
-import { polygonAmoy } from "wagmi/chains";
-import { apiFetch, clearToken, getToken, setToken } from "./api";
-import { subjectIdFromWallet } from "./lib/subject";
-import { attestationHubAbi } from "./abi/attestationHub";
-import { hasBrowserWalletProvider, walletConnectEnabled } from "./wagmi";
-import { FaceScanner } from "./components/FaceScanner";
+import { useState, useEffect, useCallback } from "react";
+import { api } from "./api";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { ShieldCheck, ScanFace, FileCheck, Search, AlertTriangle, LogOut, User, Activity } from "lucide-react";
+import { FaceScanner } from "./components/FaceScanner";
+import { QRCodeSVG } from "qrcode.react";
+import {
+  ShieldCheck, ShieldAlert, ScanFace, QrCode, Send,
+  AlertTriangle, Phone, UserCheck, Ban, RotateCcw,
+  Smartphone, Search, ChevronLeft,
+} from "lucide-react";
 
-const HUB = import.meta.env.VITE_ATTESTATION_HUB_ADDRESS as `0x${string}` | undefined;
-
-type MeData = {
-  wallet: string; didHash?: string; faceCommitmentHash?: string; faceEnrolledAt?: string;
-  applicant?: { status: string; externalId: string; reviewedAt?: string };
-  risk?: { tier: string; eddRequired: boolean; eddStatus?: string };
-  trust?: { score: number; level: string; breakdown: Record<string, number> };
-  kycSessions?: { status: string; createdAt: string }[];
-  recentJobs?: { kind: string; status: string; txHash?: string; createdAt: string }[];
+type User = {
+  id: string; phone: string; name: string; verified: boolean;
+  faceHash: string | null; faceEnrolledAt: string | null;
+  trustScore: number; trustLevel: string;
+  isAgent: boolean; revoked: boolean; revokedAt: string | null;
+  transactionCount: number;
 };
 
-type LookupData = {
-  wallet: string; faceEnrolled: boolean; faceCommitmentHash?: string;
-  kyc: string; riskTier?: string;
-  trust: { score: number; level: string; breakdown: Record<string, number> };
-  memberSince: string;
-};
+type Screen = "login" | "home" | "send" | "scan" | "revoke" | "face-enroll" | "face-verify" | "demo";
 
 export function App() {
-  const { address, isConnected } = useAccount();
-  const chainId = useChainId();
-  const { connect, connectors, isPending: connectPending, error: connectError, reset: resetConnect } = useConnect();
-  const { disconnect } = useDisconnect();
-  const { switchChain, isPending: switchPending } = useSwitchChain();
-  const { signMessageAsync, isPending: signPending } = useSignMessage();
-
-  const [token, setTokenState] = useState<string | null>(() => getToken());
-  const [me, setMe] = useState<MeData | null>(null);
-  const [onboarding, setOnboarding] = useState<{ applicantId?: string } | null>(null);
+  const [screen, setScreen] = useState<Screen>("login");
+  const [me, setMe] = useState<User | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [country, setCountry] = useState("USA");
-  const [eddApproved, setEddApproved] = useState(false);
-  const [lookupAddr, setLookupAddr] = useState("");
-  const [lookupResult, setLookupResult] = useState<LookupData | null>(null);
-  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [phone, setPhone] = useState("+255712345678");
 
-  const subjectId = address && HUB ? subjectIdFromWallet(address) : undefined;
-  const { data: onChainAtt, refetch: refetchAtt } = useReadContract({ address: HUB, abi: attestationHubAbi, functionName: "attestations", args: subjectId ? [subjectId] : undefined, query: { enabled: Boolean(HUB && subjectId) } });
-
-  useEffect(() => { setTokenState(getToken()); }, []);
-  useEffect(() => { if (connectError?.message) setError(connectError.message.includes("Provider not found") ? "No wallet detected. Use Dev login." : connectError.message); }, [connectError]);
-
-  const refreshMe = useCallback(async () => {
-    const res = await apiFetch("/me");
-    if (res.ok) setMe(await res.json() as MeData); else setMe(null);
-  }, []);
-
-  useEffect(() => { if (token) void refreshMe(); else setMe(null); }, [token, refreshMe]);
-
-  const handleDevLogin = async () => {
+  const login = async (ph: string) => {
     setError(null);
-    try {
-      const res = await fetch("/dev/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
-      if (!res.ok) { setError(((await res.json()) as { error?: string }).error ?? "Failed"); return; }
-      const { token: t } = (await res.json()) as { token: string };
-      setToken(t); setTokenState(t); await refreshMe();
-    } catch { setError("Network error."); }
+    const res = await api("/auth/login", { method: "POST", body: JSON.stringify({ phone: ph }) });
+    const j = await res.json() as { user?: User; error?: string };
+    if (j.user) { setMe(j.user); setScreen("home"); } else setError(j.error ?? "Login failed");
   };
 
-  const handleSignIn = async () => {
-    if (!address) return; setError(null);
-    try { if (chainId !== polygonAmoy.id) await switchChain({ chainId: polygonAmoy.id }); } catch { setError("Switch to Amoy first."); return; }
-    try {
-      const nr = await fetch(`/auth/nonce?address=${encodeURIComponent(address)}`);
-      if (!nr.ok) { setError("Nonce failed"); return; }
-      const { nonce } = (await nr.json()) as { nonce: string };
-      const siwe = new SiweMessage({ domain: window.location.host, address, statement: "Sign in to Indentix", uri: window.location.origin, version: "1", chainId: polygonAmoy.id, nonce });
-      const signature = await signMessageAsync({ message: siwe.prepareMessage() });
-      const vr = await fetch("/auth/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: siwe.prepareMessage(), signature }) });
-      const j = (await vr.json()) as { token?: string; error?: string };
-      if (!vr.ok || !j.token) { setError(j.error ?? "Verify failed"); return; }
-      setToken(j.token); setTokenState(j.token); await refreshMe();
-    } catch (e) { setError(e instanceof Error ? e.message : "Sign-in failed."); }
-  };
+  const refresh = useCallback(async () => {
+    if (!me) return;
+    const res = await api(`/user/${me.id}`);
+    const j = await res.json() as { user?: User };
+    if (j.user) setMe(j.user);
+  }, [me]);
 
-  const logout = () => { clearToken(); setTokenState(null); setMe(null); setOnboarding(null); disconnect(); };
-  const kycApplicantId = onboarding?.applicantId ?? me?.applicant?.externalId;
+  if (screen === "login") return <LoginScreen phone={phone} setPhone={setPhone} onLogin={(ph) => void login(ph)} onDemo={() => setScreen("demo")} error={error} />;
+  if (!me) return null;
+  if (screen === "home") return <HomeScreen me={me} setScreen={setScreen} />;
+  if (screen === "send") return <SendMoneyScreen me={me} onBack={() => setScreen("home")} />;
+  if (screen === "scan") return <ScanScreen me={me} onBack={() => setScreen("home")} />;
+  if (screen === "revoke") return <RevokeScreen me={me} onBack={() => { void refresh(); setScreen("home"); }} />;
+  if (screen === "face-enroll") return <FaceEnrollScreen me={me} onDone={() => { void refresh(); setScreen("home"); }} />;
+  if (screen === "face-verify") return <FaceVerifyScreen me={me} onDone={() => setScreen("home")} />;
+  if (screen === "demo") return <DemoScreen onBack={() => setScreen("login")} onLogin={(ph) => { void login(ph); }} />;
+  return null;
+}
 
-  const startOnboarding = async () => {
-    setError(null);
-    try { const res = await apiFetch("/onboarding/start", { method: "POST", body: JSON.stringify({}) }); const j = await res.json(); if (!res.ok) { setError((j as { error?: string }).error ?? "Failed"); return; } setOnboarding(j as { applicantId: string }); await refreshMe(); } catch { setError("Network error."); }
-  };
-
-  const mockKyc = async (review: "approved" | "rejected") => {
-    if (!kycApplicantId) { setError("Start KYC first."); return; } setError(null);
-    try {
-      const needsEdd = ["IRN", "PRK", "MMR", "SYR"].includes(country);
-      const res = await apiFetch("/dev/mock-kyc", { method: "POST", body: JSON.stringify({ applicantId: kycApplicantId, reviewStatus: review, countryCode: country, eddApproved: needsEdd ? eddApproved : undefined }) });
-      const j = await res.json(); if (!res.ok) { setError((j as { error?: string }).error ?? "Failed"); return; }
-      setOnboarding(null); await refreshMe(); await refetchAtt();
-    } catch { setError("Network error."); }
-  };
-
-  const revokeIdentity = async () => {
-    if (!confirm("Revoke identity? Face data will be cleared.")) return; setError(null);
-    try { const res = await apiFetch("/identity/revoke", { method: "POST", body: JSON.stringify({}) }); if (!res.ok) { setError("Revoke failed"); return; } await refreshMe(); } catch { setError("Network error."); }
-  };
-
-  const doLookup = async () => {
-    setLookupError(null); setLookupResult(null);
-    if (!lookupAddr.trim()) { setLookupError("Enter a wallet address."); return; }
-    try { const res = await fetch(`/lookup/${encodeURIComponent(lookupAddr.trim())}`); const j = await res.json(); if (!res.ok) { setLookupError((j as { error?: string }).error ?? "Not found"); return; } setLookupResult(j as LookupData); } catch { setLookupError("Network error."); }
-  };
-
-  const loggedIn = Boolean(token);
-  const faceEnrolled = Boolean(me?.faceCommitmentHash);
-  const kycStatus = me?.applicant?.status;
-
+/* ── LOGIN ── */
+function LoginScreen({ phone, setPhone, onLogin, onDemo, error }: { phone: string; setPhone: (v: string) => void; onLogin: (ph: string) => void; onDemo: () => void; error: string | null }) {
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8 space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Indentix</h1>
-        <p className="text-sm text-slate-500">Portable trust layer — Polygon Amoy</p>
+    <Shell>
+      <div className="text-center mb-6">
+        <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center mb-3">
+          <ShieldCheck className="w-8 h-8 text-white" />
+        </div>
+        <h1 className="text-2xl font-bold">Indentix</h1>
+        <p className="text-sm text-slate-500">Trusted mobile payments for Tanzania</p>
       </div>
-
-      {/* ── Login ── */}
-      {!loggedIn && (
-        <div className="space-y-4">
-          <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><User className="w-4 h-4" /> Connect wallet</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              {!isConnected ? (
-                <Button disabled={connectPending} onClick={() => { setError(null); resetConnect(); const c = connectors[0]; if (c && hasBrowserWalletProvider()) connect({ connector: c }); else if (walletConnectEnabled()) { const wc = connectors.find(x => x.id === "walletConnect"); if (wc) connect({ connector: wc }); } else setError("No wallet. Use Dev login."); }}>
-                  {connectPending ? "Connecting…" : "Connect wallet"}
-                </Button>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <code className="text-xs text-slate-500">{address}</code>
-                  <Button variant="outline" size="sm" onClick={() => disconnect()}>Disconnect</Button>
-                </div>
-              )}
-              {isConnected && chainId !== polygonAmoy.id && <Button size="sm" disabled={switchPending} onClick={() => switchChain({ chainId: polygonAmoy.id })}>Switch to Amoy</Button>}
-              {isConnected && <Button disabled={signPending || chainId !== polygonAmoy.id} onClick={() => void handleSignIn()}>Sign in (SIWE)</Button>}
-            </CardContent>
-          </Card>
-          <Card className="border-indigo-200">
-            <CardHeader><CardTitle>Dev login</CardTitle><CardDescription>No wallet needed.</CardDescription></CardHeader>
-            <CardContent><Button onClick={() => void handleDevLogin()}>Dev login</Button></CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* ── Dashboard ── */}
-      {loggedIn && me && (
-        <div className="space-y-4">
-          {/* Trust header */}
-          <Card>
-            <CardContent className="pt-5 flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <TrustScoreRing score={me.trust?.score ?? 0} level={me.trust?.level ?? "UNVERIFIED"} />
-                  <div>
-                    <p className="text-sm font-semibold">{me.trust?.level ?? "UNVERIFIED"}</p>
-                    <p className="text-xs text-slate-400">{me.wallet.slice(0, 6)}…{me.wallet.slice(-4)}</p>
-                  </div>
-                </div>
-              </div>
-              <Button variant="ghost" size="sm" onClick={logout}><LogOut className="w-4 h-4 mr-1" />Sign out</Button>
-            </CardContent>
-          </Card>
-
-          {/* Steps */}
-          <Card>
-            <CardContent className="pt-5">
-              <div className="flex justify-around text-center">
-                {[
-                  { icon: <ScanFace className="w-5 h-5" />, label: "Face ID", done: faceEnrolled },
-                  { icon: <FileCheck className="w-5 h-5" />, label: "KYC", done: kycStatus === "APPROVED" },
-                  { icon: <ShieldCheck className="w-5 h-5" />, label: "Trusted", done: faceEnrolled && kycStatus === "APPROVED" },
-                ].map((s, i) => (
-                  <div key={i} className="flex flex-col items-center gap-1">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${s.done ? "bg-green-500 text-white" : "bg-slate-100 text-slate-400"}`}>{s.done ? "✓" : s.icon}</div>
-                    <span className={`text-xs font-semibold ${s.done ? "text-green-600" : "text-slate-400"}`}>{s.label}</span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Face */}
-          <FaceIdentityCard enrolled={faceEnrolled} faceHash={me.faceCommitmentHash} onChanged={() => void refreshMe()} />
-
-          {/* KYC */}
-          {!faceEnrolled ? (
-            <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2"><FileCheck className="w-4 h-4" /> KYC / CDD / EDD</CardTitle></CardHeader>
-              <CardContent><p className="text-sm text-slate-500">Enroll your face first to unlock KYC.</p></CardContent>
-            </Card>
-          ) : (
-            <KycCard applicant={me.applicant} risk={me.risk} hasApplicant={Boolean(kycApplicantId)} onStart={() => void startOnboarding()} onApprove={() => void mockKyc("approved")} onReject={() => void mockKyc("rejected")} country={country} onCountryChange={setCountry} eddApproved={eddApproved} onEddChange={setEddApproved} />
-          )}
-
-          {/* Activity */}
-          <ActivityCard sessions={me.kycSessions} jobs={me.recentJobs} />
-
-          {/* Profile */}
-          <Card>
-            <CardHeader><CardTitle>Profile</CardTitle></CardHeader>
-            <CardContent className="text-sm space-y-1">
-              <div><span className="font-medium">Wallet:</span> <code className="text-xs text-slate-400">{me.wallet}</code></div>
-              <div><span className="font-medium">Face:</span> {me.faceCommitmentHash ? <><Badge variant="success">Enrolled</Badge> <code className="text-xs text-slate-400 ml-1">{me.faceCommitmentHash.slice(0, 18)}…</code></> : <Badge variant="warning">Not enrolled</Badge>}</div>
-              <div><span className="font-medium">KYC:</span> <Badge variant={kycStatus === "APPROVED" ? "success" : kycStatus === "REJECTED" ? "destructive" : "secondary"}>{kycStatus ?? "Not started"}</Badge></div>
-              <div><span className="font-medium">Risk:</span> <Badge variant={me.risk?.tier === "LOW" ? "success" : me.risk?.tier === "HIGH" ? "destructive" : "secondary"}>{me.risk?.tier ?? "—"}</Badge>{me.risk?.eddRequired && <span className="text-xs text-slate-400 ml-2">EDD: {me.risk.eddStatus ?? "required"}</span>}</div>
-              {me.trust && <div><span className="font-medium">Trust:</span> {me.trust.score}/100 — {Object.entries(me.trust.breakdown).map(([k, v]) => `${k}: +${v}`).join(", ")}</div>}
-            </CardContent>
-          </Card>
-
-          {/* Revoke */}
-          <Card className="border-red-200">
-            <CardHeader><CardTitle className="flex items-center gap-2 text-red-600"><AlertTriangle className="w-4 h-4" /> Danger zone</CardTitle><CardDescription>Revoke identity — clears face data.</CardDescription></CardHeader>
-            <CardContent><Button variant="destructive" onClick={() => void revokeIdentity()}>Revoke identity</Button></CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* ── Lookup ── */}
       <Card>
-        <CardHeader><CardTitle className="flex items-center gap-2"><Search className="w-4 h-4" /> Lookup user trust</CardTitle><CardDescription>Enter any wallet to view their trust score.</CardDescription></CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex gap-2">
-            <Input placeholder="0x…" value={lookupAddr} onChange={(e) => setLookupAddr(e.target.value)} />
-            <Button onClick={() => void doLookup()}>Lookup</Button>
-          </div>
-          {lookupError && <p className="text-sm text-red-500">{lookupError}</p>}
-          {lookupResult && <LookupResultCard data={lookupResult} />}
+        <CardContent className="pt-5 space-y-3">
+          <label className="text-sm font-medium">Phone number</label>
+          <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+255…" />
+          <Button className="w-full" onClick={() => onLogin(phone)}>
+            <Phone className="w-4 h-4 mr-2" /> Sign in
+          </Button>
+          {error && <p className="text-xs text-red-500">{error}</p>}
         </CardContent>
       </Card>
-
-      {subjectId && onChainAtt && (
-        <Card>
-          <CardHeader><CardTitle>On-chain attestation</CardTitle></CardHeader>
-          <CardContent><pre className="text-xs bg-slate-900 text-slate-200 rounded-lg p-3 overflow-auto">{JSON.stringify({ kycLevel: onChainAtt[0], riskTier: onChainAtt[1], verifiedAt: Number(onChainAtt[2]), revoked: onChainAtt[4] }, null, 2)}</pre></CardContent>
-        </Card>
-      )}
-
-      {error && <Card className="border-red-300"><CardContent className="pt-5 text-sm text-red-600">{error}</CardContent></Card>}
-    </div>
+      <Button variant="outline" className="w-full mt-3" onClick={onDemo}>
+        <Smartphone className="w-4 h-4 mr-2" /> Demo mode
+      </Button>
+    </Shell>
   );
 }
 
-/* ── Sub-components ── */
-
-function TrustScoreRing({ score, level }: { score: number; level: string }) {
-  const r = 34; const circ = 2 * Math.PI * r; const offset = circ - (score / 100) * circ;
-  const color = score >= 80 ? "#22c55e" : score >= 50 ? "#f59e0b" : score >= 25 ? "#6366f1" : "#94a3b8";
+/* ── HOME ── */
+function HomeScreen({ me, setScreen }: { me: User; setScreen: (s: Screen) => void }) {
+  const color = trustColor(me.trustLevel);
   return (
-    <svg width="80" height="80" viewBox="0 0 80 80">
-      <circle cx="40" cy="40" r={r} fill="none" stroke="#e2e8f0" strokeWidth="5" />
-      <circle cx="40" cy="40" r={r} fill="none" stroke={color} strokeWidth="5" strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round" transform="rotate(-90 40 40)" style={{ transition: "stroke-dashoffset 0.5s ease" }} />
-      <text x="40" y="38" textAnchor="middle" style={{ fontSize: "1.1rem", fontWeight: 700, fill: "#0f172a" }}>{score}</text>
-      <text x="40" y="50" textAnchor="middle" style={{ fontSize: "0.4rem", fontWeight: 600, fill: color }}>{level}</text>
+    <Shell>
+      <Card className="overflow-hidden">
+        <div className={`h-2 ${color === "green" ? "bg-green-500" : color === "amber" ? "bg-amber-500" : color === "red" ? "bg-red-500" : "bg-slate-300"}`} />
+        <CardContent className="pt-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-bold text-lg">{me.name}</p>
+              <p className="text-xs text-slate-500">{me.phone}</p>
+            </div>
+            <TrustRing score={me.trustScore} level={me.trustLevel} />
+          </div>
+          <div className="flex flex-wrap gap-1.5 mt-3">
+            {me.verified && <Badge variant="success">Verified</Badge>}
+            {!me.verified && <Badge variant="warning">Unverified</Badge>}
+            {me.faceHash && <Badge variant="success">Face ID</Badge>}
+            {me.isAgent && <Badge variant="outline">Agent</Badge>}
+            {me.revoked && <Badge variant="destructive">REVOKED</Badge>}
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-2 gap-3 mt-4">
+        <ActionCard icon={<Send className="w-5 h-5" />} label="Send Money" desc="Verify before paying" onClick={() => setScreen("send")} />
+        <ActionCard icon={<QrCode className="w-5 h-5" />} label="Scan QR" desc="Verify agent/user" onClick={() => setScreen("scan")} />
+        <ActionCard icon={<ScanFace className="w-5 h-5" />} label={me.faceHash ? "Verify Face" : "Enroll Face"} desc={me.faceHash ? "Test your identity" : "Set up Face ID"} onClick={() => setScreen(me.faceHash ? "face-verify" : "face-enroll")} />
+        <ActionCard icon={<Ban className="w-5 h-5 text-red-500" />} label="Emergency" desc="Lock or recover" className="border-red-200" onClick={() => setScreen("revoke")} />
+      </div>
+
+      {me.faceHash && (
+        <Card className="mt-4">
+          <CardContent className="pt-4">
+            <p className="text-xs font-semibold text-slate-500 mb-1">Your identity hash</p>
+            <code className="text-[0.6rem] text-slate-400 break-all">{me.faceHash}</code>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card className="mt-4">
+        <CardContent className="pt-4">
+          <p className="text-xs font-semibold text-slate-500 mb-2">Your QR code</p>
+          <div className="flex justify-center">
+            <QRCodeSVG value={JSON.stringify({ id: me.id, phone: me.phone, name: me.name, trust: me.trustScore })} size={160} />
+          </div>
+          <p className="text-xs text-slate-400 mt-2 text-center">Show this to verify your identity</p>
+        </CardContent>
+      </Card>
+    </Shell>
+  );
+}
+
+/* ── SEND MONEY ── */
+function SendMoneyScreen({ me: _me, onBack }: { me: User; onBack: () => void }) {
+  const [recipientPhone, setRecipientPhone] = useState("");
+  const [recipient, setRecipient] = useState<User | null>(null);
+  const [lookupDone, setLookupDone] = useState(false);
+  const [amount, setAmount] = useState("50000");
+  const [sent, setSent] = useState(false);
+
+  const lookup = async () => {
+    setRecipient(null); setLookupDone(false);
+    const res = await api(`/lookup/phone/${encodeURIComponent(recipientPhone)}`);
+    const j = await res.json() as { user?: User };
+    setRecipient(j.user ?? null);
+    setLookupDone(true);
+  };
+
+  const rColor = recipient ? trustColor(recipient.trustLevel) : "";
+  const isSafe = recipient && recipient.trustScore >= 50 && !recipient.revoked;
+
+  return (
+    <Shell>
+      <BackButton onClick={onBack} />
+      <h2 className="text-lg font-bold mb-3 flex items-center gap-2"><Send className="w-5 h-5" /> Send Money</h2>
+
+      <Card>
+        <CardContent className="pt-5 space-y-3">
+          <label className="text-sm font-medium">Recipient phone</label>
+          <div className="flex gap-2">
+            <Input value={recipientPhone} onChange={(e) => setRecipientPhone(e.target.value)} placeholder="+255…" />
+            <Button onClick={() => void lookup()}>Check</Button>
+          </div>
+
+          {lookupDone && !recipient && (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm">
+              <AlertTriangle className="w-4 h-4 text-amber-500 inline mr-1" />
+              <strong>Unknown user</strong> — not registered on Indentix. Proceed with caution.
+            </div>
+          )}
+
+          {recipient && (
+            <div className={`rounded-lg border p-3 ${rColor === "red" ? "border-red-300 bg-red-50" : rColor === "green" ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"}`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-semibold">{recipient.name}</p>
+                  <p className="text-xs text-slate-500">{recipient.phone}</p>
+                </div>
+                <TrustRing score={recipient.trustScore} level={recipient.trustLevel} size={60} />
+              </div>
+              <div className="flex gap-1.5 mt-2">
+                {recipient.verified ? <Badge variant="success">Verified</Badge> : <Badge variant="warning">Unverified</Badge>}
+                {recipient.faceHash && <Badge variant="success">Face ID</Badge>}
+                {recipient.revoked && <Badge variant="destructive">REVOKED</Badge>}
+                {recipient.trustLevel === "SCAMMER" && <Badge variant="destructive">⚠ SCAMMER</Badge>}
+              </div>
+              {!isSafe && <p className="text-xs text-red-600 mt-2 font-semibold">⚠ Warning: Low trust score or revoked account. Do not send money.</p>}
+            </div>
+          )}
+
+          {isSafe && !sent && (
+            <>
+              <label className="text-sm font-medium">Amount (TZS)</label>
+              <Input value={amount} onChange={(e) => setAmount(e.target.value)} />
+              <Button className="w-full" onClick={() => setSent(true)}>
+                <UserCheck className="w-4 h-4 mr-2" /> Confirm & Send {Number(amount).toLocaleString()} TZS
+              </Button>
+            </>
+          )}
+
+          {sent && (
+            <div className="rounded-lg bg-green-50 border border-green-200 p-4 text-center">
+              <ShieldCheck className="w-8 h-8 text-green-500 mx-auto" />
+              <p className="font-bold mt-2">Payment sent</p>
+              <p className="text-xs text-slate-500">Verified recipient: {recipient?.name}</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="mt-3">
+        <CardContent className="pt-4 space-y-2">
+          <p className="text-xs font-semibold text-slate-500">Verify a payment confirmation</p>
+          <p className="text-xs text-slate-400">Got a screenshot? Check if the transaction is real.</p>
+          <Button variant="outline" size="sm" onClick={async () => {
+            const res = await api("/payment/verify", { method: "POST", body: JSON.stringify({ senderPhone: recipientPhone || "+255700000000" }) });
+            const j = await res.json() as { verified: boolean; warning?: string };
+            alert(j.verified ? "✓ Payment verified as REAL" : `⚠ ${j.warning ?? "FAKE PAYMENT — not found in network"}`);
+          }}>
+            <Search className="w-4 h-4 mr-1" /> Verify payment
+          </Button>
+        </CardContent>
+      </Card>
+    </Shell>
+  );
+}
+
+/* ── SCAN QR ── */
+function ScanScreen({ me: _me, onBack }: { me: User; onBack: () => void }) {
+  const [scannedId, setScannedId] = useState("");
+  const [result, setResult] = useState<User | null>(null);
+  const [checked, setChecked] = useState(false);
+
+  const check = async () => {
+    setResult(null); setChecked(false);
+    const res = await api(`/user/${scannedId}`);
+    const j = await res.json() as { user?: User };
+    setResult(j.user ?? null);
+    setChecked(true);
+  };
+
+  return (
+    <Shell>
+      <BackButton onClick={onBack} />
+      <h2 className="text-lg font-bold mb-3 flex items-center gap-2"><QrCode className="w-5 h-5" /> Scan & Verify</h2>
+
+      <Card>
+        <CardContent className="pt-5 space-y-3">
+          <p className="text-sm text-slate-500">Enter the user/agent ID from their QR code:</p>
+          <div className="flex gap-2">
+            <Input value={scannedId} onChange={(e) => setScannedId(e.target.value)} placeholder="user_mama_anna" />
+            <Button onClick={() => void check()}>Verify</Button>
+          </div>
+
+          {/* Demo quick-scan buttons */}
+          <div className="flex flex-wrap gap-1.5">
+            <Button variant="outline" size="sm" onClick={() => { setScannedId("user_real_agent"); }}>Real Agent</Button>
+            <Button variant="outline" size="sm" onClick={() => { setScannedId("user_fake_agent"); }}>Fake Agent</Button>
+            <Button variant="outline" size="sm" onClick={() => { setScannedId("user_scammer"); }}>Scammer</Button>
+            <Button variant="outline" size="sm" onClick={() => { setScannedId("user_mama_anna"); }}>Mama Anna</Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {checked && !result && (
+        <Card className="mt-3 border-red-300">
+          <CardContent className="pt-4 text-center">
+            <ShieldAlert className="w-8 h-8 text-red-500 mx-auto" />
+            <p className="font-bold text-red-600 mt-2">NOT FOUND</p>
+            <p className="text-xs text-slate-500">This ID is not registered. Do not trust this person.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {result && (
+        <Card className={`mt-3 ${result.trustScore < 50 || result.revoked ? "border-red-300" : "border-green-200"}`}>
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-bold">{result.name}</p>
+                <p className="text-xs text-slate-500">{result.phone}</p>
+              </div>
+              <TrustRing score={result.trustScore} level={result.trustLevel} size={60} />
+            </div>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {result.verified ? <Badge variant="success">Verified</Badge> : <Badge variant="warning">Unverified</Badge>}
+              {result.faceHash && <Badge variant="success">Face ID</Badge>}
+              {result.isAgent && result.verified && <Badge variant="success">Licensed Agent</Badge>}
+              {result.isAgent && !result.verified && <Badge variant="destructive">⚠ UNVERIFIED AGENT</Badge>}
+              {result.revoked && <Badge variant="destructive">REVOKED</Badge>}
+              {result.trustLevel === "SCAMMER" && <Badge variant="destructive">⚠ KNOWN SCAMMER</Badge>}
+            </div>
+            {(result.trustScore < 50 || result.revoked || result.trustLevel === "SCAMMER") && (
+              <div className="mt-3 p-2 rounded bg-red-50 border border-red-200 text-xs text-red-700 font-semibold">
+                ⚠ Do NOT transact with this {result.isAgent ? "agent" : "user"}. Low trust / flagged.
+              </div>
+            )}
+            {result.trustScore >= 50 && !result.revoked && (
+              <div className="mt-3 p-2 rounded bg-green-50 border border-green-200 text-xs text-green-700 font-semibold">
+                ✓ This {result.isAgent ? "agent" : "user"} is trusted. Safe to transact.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </Shell>
+  );
+}
+
+/* ── REVOKE / RECOVER ── */
+function RevokeScreen({ me, onBack }: { me: User; onBack: () => void }) {
+  const [done, setDone] = useState<string | null>(null);
+  const revoke = async () => {
+    const res = await api("/identity/revoke", { method: "POST", body: JSON.stringify({ userId: me.id }) });
+    const j = await res.json() as { message?: string };
+    setDone(j.message ?? "Revoked");
+  };
+  const recover = async () => {
+    const res = await api("/identity/recover", { method: "POST", body: JSON.stringify({ userId: me.id }) });
+    const j = await res.json() as { message?: string };
+    setDone(j.message ?? "Recovered");
+  };
+
+  return (
+    <Shell>
+      <BackButton onClick={onBack} />
+      <h2 className="text-lg font-bold mb-3 flex items-center gap-2"><Ban className="w-5 h-5 text-red-500" /> Emergency</h2>
+
+      {!me.revoked ? (
+        <Card className="border-red-200">
+          <CardContent className="pt-5 space-y-3">
+            <p className="text-sm">Phone stolen? SIM swapped? Lock your identity immediately.</p>
+            <Button variant="destructive" className="w-full" onClick={() => void revoke()}>
+              <Ban className="w-4 h-4 mr-2" /> Lock my identity NOW
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="border-green-200">
+          <CardContent className="pt-5 space-y-3">
+            <div className="text-center">
+              <Ban className="w-8 h-8 text-red-500 mx-auto" />
+              <p className="font-bold text-red-600 mt-2">Account is LOCKED</p>
+              <p className="text-xs text-slate-500 mt-1">Locked at {me.revokedAt ? new Date(me.revokedAt).toLocaleString() : "—"}</p>
+            </div>
+            <Button className="w-full" onClick={() => void recover()}>
+              <RotateCcw className="w-4 h-4 mr-2" /> Recover my identity
+            </Button>
+            <p className="text-xs text-slate-400">You'll need to re-enroll your face after recovery.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {done && (
+        <Card className="mt-3">
+          <CardContent className="pt-4 text-center">
+            <ShieldCheck className="w-6 h-6 text-green-500 mx-auto" />
+            <p className="text-sm mt-2">{done}</p>
+          </CardContent>
+        </Card>
+      )}
+    </Shell>
+  );
+}
+
+/* ── FACE ENROLL ── */
+function FaceEnrollScreen({ me, onDone }: { me: User; onDone: () => void }) {
+  return (
+    <Shell>
+      <FaceScanner mode="enroll" userId={me.id} onComplete={onDone} onClose={onDone} />
+    </Shell>
+  );
+}
+
+/* ── FACE VERIFY ── */
+function FaceVerifyScreen({ me, onDone }: { me: User; onDone: () => void }) {
+  return (
+    <Shell>
+      <FaceScanner mode="verify" userId={me.id} onComplete={onDone} onClose={onDone} />
+    </Shell>
+  );
+}
+
+/* ── DEMO MODE ── */
+function DemoScreen({ onBack, onLogin }: { onBack: () => void; onLogin: (ph: string) => void }) {
+  const [users, setUsers] = useState<User[]>([]);
+  useEffect(() => { void (async () => { const res = await api("/demo/users"); const j = await res.json() as { users: User[] }; setUsers(j.users ?? []); })(); }, []);
+
+  return (
+    <Shell>
+      <BackButton onClick={onBack} />
+      <h2 className="text-lg font-bold mb-3">Demo mode</h2>
+      <p className="text-sm text-slate-500 mb-3">Pre-loaded Tanzania mobile payment users. Tap to login as any of them.</p>
+      <div className="space-y-2">
+        {users.map((u) => (
+          <Card key={u.id} className="cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => onLogin(u.phone)}>
+            <CardContent className="pt-3 pb-3 flex items-center justify-between">
+              <div>
+                <p className="font-semibold text-sm">{u.name}</p>
+                <p className="text-xs text-slate-400">{u.phone} {u.isAgent ? "· Agent" : ""}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant={u.trustScore >= 50 ? "success" : u.trustLevel === "SCAMMER" ? "destructive" : "warning"}>{u.trustLevel}</Badge>
+                <span className="text-xs font-bold">{u.trustScore}</span>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </Shell>
+  );
+}
+
+/* ── Shared components ── */
+
+function Shell({ children }: { children: React.ReactNode }) {
+  return <div className="max-w-sm mx-auto px-4 py-6 min-h-screen bg-slate-50">{children}</div>;
+}
+
+function BackButton({ onClick }: { onClick: () => void }) {
+  return <button onClick={onClick} className="flex items-center gap-1 text-sm text-slate-500 mb-3 hover:text-slate-700"><ChevronLeft className="w-4 h-4" /> Back</button>;
+}
+
+function ActionCard({ icon, label, desc, className, onClick }: { icon: React.ReactNode; label: string; desc: string; className?: string; onClick: () => void }) {
+  return (
+    <Card className={`cursor-pointer hover:bg-slate-50 transition-colors ${className ?? ""}`} onClick={onClick}>
+      <CardContent className="pt-4 pb-3 text-center">
+        <div className="mx-auto w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mb-2">{icon}</div>
+        <p className="text-sm font-semibold">{label}</p>
+        <p className="text-[0.65rem] text-slate-400">{desc}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TrustRing({ score, level, size = 70 }: { score: number; level: string; size?: number }) {
+  const r = size * 0.38; const circ = 2 * Math.PI * r; const offset = circ - (score / 100) * circ;
+  const c = score >= 80 ? "#22c55e" : score >= 50 ? "#f59e0b" : score >= 25 ? "#6366f1" : "#ef4444";
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e2e8f0" strokeWidth="4" />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={c} strokeWidth="4" strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round" transform={`rotate(-90 ${size / 2} ${size / 2})`} style={{ transition: "stroke-dashoffset 0.5s" }} />
+      <text x={size / 2} y={size / 2 - 2} textAnchor="middle" style={{ fontSize: size * 0.22, fontWeight: 700, fill: "#0f172a" }}>{score}</text>
+      <text x={size / 2} y={size / 2 + size * 0.12} textAnchor="middle" style={{ fontSize: size * 0.1, fontWeight: 600, fill: c }}>{level}</text>
     </svg>
   );
 }
 
-function FaceIdentityCard({ enrolled, faceHash, onChanged }: { enrolled: boolean; faceHash?: string; onChanged: () => void }) {
-  const [scannerMode, setScannerMode] = useState<"enroll" | "verify" | null>(null);
-  if (scannerMode) return <Card><CardContent className="pt-5"><FaceScanner mode={scannerMode} onComplete={onChanged} onClose={() => setScannerMode(null)} /></CardContent></Card>;
-  return (
-    <Card>
-      <CardHeader><CardTitle className="flex items-center gap-2"><ScanFace className="w-4 h-4" /> Face identity</CardTitle></CardHeader>
-      <CardContent className="text-center space-y-3">
-        {enrolled ? <Badge variant="success" className="text-sm px-3 py-1">✓ Identity enrolled</Badge> : <Badge variant="warning" className="text-sm px-3 py-1">Not set</Badge>}
-        {faceHash && <code className="block text-[0.65rem] text-slate-400 break-all">{faceHash}</code>}
-        <div className="flex justify-center gap-2">
-          <Button size="sm" onClick={() => setScannerMode("enroll")}>{enrolled ? "Re-set" : "Set identity"}</Button>
-          {enrolled && <Button variant="outline" size="sm" onClick={() => setScannerMode("verify")}>Test</Button>}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function KycCard({ applicant, risk, hasApplicant, onStart, onApprove, onReject, country, onCountryChange, eddApproved, onEddChange }: { applicant?: MeData["applicant"]; risk?: MeData["risk"]; hasApplicant: boolean; onStart: () => void; onApprove: () => void; onReject: () => void; country: string; onCountryChange: (v: string) => void; eddApproved: boolean; onEddChange: (v: boolean) => void }) {
-  const status = applicant?.status;
-  const isApproved = status === "APPROVED"; const isRejected = status === "REJECTED";
-  const needsEdd = ["IRN", "PRK", "MMR", "SYR"].includes(country);
-  return (
-    <Card>
-      <CardHeader><CardTitle className="flex items-center gap-2"><FileCheck className="w-4 h-4" /> KYC / CDD / EDD</CardTitle></CardHeader>
-      <CardContent className="space-y-3">
-        <div>
-          {isApproved && <Badge variant="success">✓ Approved — {risk?.tier ?? "LOW"}{risk?.eddRequired ? ` · EDD ${risk.eddStatus ?? "required"}` : ""}</Badge>}
-          {isRejected && <Badge variant="destructive">✗ Rejected</Badge>}
-          {!isApproved && !isRejected && hasApplicant && <Badge variant="warning">Pending review</Badge>}
-          {!hasApplicant && <Badge variant="secondary">Not started</Badge>}
-        </div>
-        {!hasApplicant && <Button onClick={onStart}>Start KYC</Button>}
-        {hasApplicant && !isApproved && !isRejected && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-slate-600">Country</label>
-              <Input value={country} onChange={(e) => onCountryChange(e.target.value.toUpperCase())} maxLength={3} className="w-20" />
-            </div>
-            {needsEdd && (
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={eddApproved} onChange={(e) => onEddChange(e.target.checked)} className="rounded" /> EDD cleared
-              </label>
-            )}
-            <div className="flex gap-2">
-              <Button size="sm" onClick={onApprove}>Approve</Button>
-              <Button variant="outline" size="sm" onClick={onReject}>Reject</Button>
-            </div>
-          </div>
-        )}
-        {(isApproved || isRejected) && <Button variant="outline" size="sm" onClick={onStart}>Restart</Button>}
-      </CardContent>
-    </Card>
-  );
-}
-
-function ActivityCard({ sessions, jobs }: { sessions?: MeData["kycSessions"]; jobs?: MeData["recentJobs"] }) {
-  const items = [
-    ...(sessions ?? []).map(s => ({ type: "KYC", detail: s.status, time: s.createdAt })),
-    ...(jobs ?? []).map(j => ({ type: j.kind, detail: `${j.status}${j.txHash ? ` · ${j.txHash.slice(0, 10)}…` : ""}`, time: j.createdAt })),
-  ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 8);
-  if (!items.length) return null;
-  return (
-    <Card>
-      <CardHeader><CardTitle className="flex items-center gap-2"><Activity className="w-4 h-4" /> Activity</CardTitle></CardHeader>
-      <CardContent>
-        <div className="divide-y divide-slate-100 text-xs">
-          {items.map((it, i) => (
-            <div key={i} className="flex justify-between py-1.5">
-              <span><span className="font-semibold">{it.type}</span> — {it.detail}</span>
-              <span className="text-slate-400">{new Date(it.time).toLocaleString()}</span>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function LookupResultCard({ data }: { data: LookupData }) {
-  return (
-    <div className="border border-slate-200 rounded-lg p-4 space-y-1 text-sm">
-      <div className="flex items-center justify-between">
-        <code className="text-xs font-semibold">{data.wallet.slice(0, 8)}…{data.wallet.slice(-6)}</code>
-        <TrustScoreRing score={data.trust.score} level={data.trust.level} />
-      </div>
-      <div>Face: {data.faceEnrolled ? <Badge variant="success">Enrolled</Badge> : <Badge variant="warning">No</Badge>}</div>
-      <div>KYC: <Badge variant={data.kyc === "APPROVED" ? "success" : data.kyc === "REJECTED" ? "destructive" : "secondary"}>{data.kyc}</Badge></div>
-      {data.riskTier && <div>Risk: <Badge variant={data.riskTier === "LOW" ? "success" : data.riskTier === "HIGH" ? "destructive" : "warning"}>{data.riskTier}</Badge></div>}
-      <p className="text-xs text-slate-400">Member since {new Date(data.memberSince).toLocaleDateString()}</p>
-    </div>
-  );
+function trustColor(level: string) {
+  if (level === "TRUSTED") return "green";
+  if (level === "VERIFIED") return "green";
+  if (level === "BASIC") return "amber";
+  return "red";
 }
