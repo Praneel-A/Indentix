@@ -220,10 +220,12 @@ function sanitize(u: ReturnType<typeof store.getById>) {
     id: u.id, phone: u.phone, name: u.name, verified: u.verified,
     faceHash: u.faceHash, faceEnrolledAt: u.faceEnrolledAt,
     govIdUploaded: Boolean(u.govIdImage), govIdUploadedAt: u.govIdUploadedAt,
-    onboarded: u.onboarded,
+    onboarded: u.onboarded, balance: u.balance,
     trustScore: u.trustScore, trustLevel: u.trustLevel,
     isAgent: u.isAgent, revoked: u.revoked, revokedAt: u.revokedAt,
-    createdAt: u.createdAt, transactionCount: u.transactions.length,
+    createdAt: u.createdAt,
+    transactionCount: u.transactions.length,
+    transactions: u.transactions.slice(-10).reverse(),
   };
 }
 

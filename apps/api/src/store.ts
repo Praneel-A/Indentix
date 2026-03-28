@@ -9,6 +9,7 @@ export interface AppUser {
   govIdImage: string | null;
   govIdUploadedAt: string | null;
   onboarded: boolean;
+  balance: number;
   trustScore: number;
   trustLevel: "TRUSTED" | "VERIFIED" | "BASIC" | "UNVERIFIED" | "SCAMMER";
   isAgent: boolean;
@@ -42,6 +43,7 @@ const DEMO_USERS: AppUser[] = [
     govIdImage: null,
     govIdUploadedAt: null,
     onboarded: true,
+    balance: 1_250_000,
     trustScore: 92,
     trustLevel: "TRUSTED",
     isAgent: false,
@@ -51,6 +53,9 @@ const DEMO_USERS: AppUser[] = [
     transactions: [
       { id: id(), from: "+14703803242", to: "+255787654321", amount: 50000, currency: "TZS", status: "confirmed", timestamp: "2026-03-27T10:30:00Z" },
       { id: id(), from: "+255798888888", to: "+14703803242", amount: 25000, currency: "TZS", status: "confirmed", timestamp: "2026-03-26T14:15:00Z" },
+      { id: id(), from: "+14703803242", to: "+255798888888", amount: 150000, currency: "TZS", status: "confirmed", timestamp: "2026-03-25T09:00:00Z" },
+      { id: id(), from: "+255787654321", to: "+14703803242", amount: 75000, currency: "TZS", status: "confirmed", timestamp: "2026-03-24T16:45:00Z" },
+      { id: id(), from: "+14703803242", to: "+255787654321", amount: 30000, currency: "TZS", status: "pending", timestamp: "2026-03-27T11:00:00Z" },
     ],
   },
   {
@@ -64,6 +69,7 @@ const DEMO_USERS: AppUser[] = [
     govIdImage: null,
     govIdUploadedAt: null,
     onboarded: true,
+    balance: 340_000,
     trustScore: 75,
     trustLevel: "VERIFIED",
     isAgent: false,
@@ -83,6 +89,7 @@ const DEMO_USERS: AppUser[] = [
     govIdImage: null,
     govIdUploadedAt: null,
     onboarded: false,
+    balance: 0,
     trustScore: 5,
     trustLevel: "SCAMMER",
     isAgent: false,
@@ -104,6 +111,7 @@ const DEMO_USERS: AppUser[] = [
     govIdImage: null,
     govIdUploadedAt: null,
     onboarded: false,
+    balance: 50_000,
     trustScore: 12,
     trustLevel: "UNVERIFIED",
     isAgent: true,
@@ -123,6 +131,7 @@ const DEMO_USERS: AppUser[] = [
     govIdImage: null,
     govIdUploadedAt: null,
     onboarded: true,
+    balance: 5_600_000,
     trustScore: 88,
     trustLevel: "TRUSTED",
     isAgent: true,
@@ -152,7 +161,7 @@ class Store {
       id: `user_${id()}`, phone, name, verified: false,
       faceEmbedding: null, faceHash: null, faceEnrolledAt: null,
       govIdImage: null, govIdUploadedAt: null, onboarded: false,
-      trustScore: 10, trustLevel: "UNVERIFIED",
+      balance: 0, trustScore: 10, trustLevel: "UNVERIFIED",
       isAgent: false, revoked: false, revokedAt: null,
       createdAt: new Date().toISOString(), transactions: [],
     };

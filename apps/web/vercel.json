@@ -1,0 +1,15 @@
+{
+  "rewrites": [
+    { "source": "/auth/:path*", "destination": "https://indentix-api.onrender.com/auth/:path*" },
+    { "source": "/user/:path*", "destination": "https://indentix-api.onrender.com/user/:path*" },
+    { "source": "/face/:path*", "destination": "https://indentix-api.onrender.com/face/:path*" },
+    { "source": "/lookup/:path*", "destination": "https://indentix-api.onrender.com/lookup/:path*" },
+    { "source": "/identity/:path*", "destination": "https://indentix-api.onrender.com/identity/:path*" },
+    { "source": "/payment/:path*", "destination": "https://indentix-api.onrender.com/payment/:path*" },
+    { "source": "/govid/:path*", "destination": "https://indentix-api.onrender.com/govid/:path*" },
+    { "source": "/onboarding/:path*", "destination": "https://indentix-api.onrender.com/onboarding/:path*" },
+    { "source": "/verify/:path*", "destination": "https://indentix-api.onrender.com/verify/:path*" },
+    { "source": "/demo/:path*", "destination": "https://indentix-api.onrender.com/demo/:path*" },
+    { "source": "/health", "destination": "https://indentix-api.onrender.com/health" }
+  ]
+}
