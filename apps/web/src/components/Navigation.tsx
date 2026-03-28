@@ -1,5 +1,6 @@
 import { Home, ShieldCheck, Flag, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useDesktopPhoneFramed } from "@/components/DesktopPhoneFrame";
 import type { Screen } from "@/types";
 
 type Props = {
@@ -16,9 +17,15 @@ const tabs: { screen: Screen; label: string; icon: typeof Home }[] = [
 ];
 
 export function Navigation({ current, onNavigate, pendingCount = 0 }: Props) {
+  const framed = useDesktopPhoneFramed();
   return (
     <nav
-      className="fixed bottom-0 left-1/2 z-50 flex w-full max-w-[430px] -translate-x-1/2 border-t border-stone-200 bg-white"
+      className={cn(
+        "z-50 flex w-full border-t border-stone-200 bg-white",
+        framed
+          ? "relative shrink-0"
+          : "fixed bottom-0 left-1/2 max-w-[430px] -translate-x-1/2",
+      )}
       style={{ minHeight: 56 }}
       role="navigation"
       aria-label="Main navigation"

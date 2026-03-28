@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { ThemeProvider } from "./theme";
 import { EasyModeProvider } from "./context/EasyModeContext";
+import { DesktopPhoneFrame } from "./components/DesktopPhoneFrame";
 import { AppToastBridge } from "./components/ui/toast";
 import { AppVersionFooter } from "./components/AppVersionFooter";
 import "./styles.css";
@@ -12,7 +13,9 @@ createRoot(document.getElementById("root")!).render(
     <ThemeProvider>
       <EasyModeProvider>
         <AppToastBridge>
-          <App />
+          <DesktopPhoneFrame>
+            <App />
+          </DesktopPhoneFrame>
           <AppVersionFooter />
         </AppToastBridge>
       </EasyModeProvider>
