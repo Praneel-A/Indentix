@@ -37,6 +37,7 @@ export function FaceScanner({ mode, userId, onComplete, onClose }: Props) {
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<Result | null>(null);
   const [modelsLoaded, setModelsLoaded] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancel = false;
@@ -54,17 +55,40 @@ export function FaceScanner({ mode, userId, onComplete, onClose }: Props) {
     let stopped = false;
     void (async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user" }, audio: false,
-        });
+        const constraints: MediaStreamConstraints = {
+          audio: false,
+          video: {
+            facingMode: "user",
+            width: { ideal: 480 },
+            height: { ideal: 640 },
+          },
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
         if (stopped) { stream.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = stream;
-        const v = videoRef.current!;
-        v.srcObject = stream;
-        await v.play();
-        setStatus("ready");
-      } catch {
-        setStatus("init");
+        const v = videoRef.current;
+        if (v) {
+          v.srcObject = stream;
+          v.setAttribute("playsinline", "true");
+          v.setAttribute("webkit-playsinline", "true");
+          v.muted = true;
+          try {
+            await v.play();
+          } catch {
+            /* iOS sometimes needs a user gesture — the play promise may reject */
+          }
+          setStatus("ready");
+        }
+      } catch (err) {
+        if (!stopped) {
+          const msg = err instanceof Error ? err.message : String(err);
+          setCameraError(msg.includes("NotAllowed")
+            ? "Camera permission denied. Please allow camera access in your browser settings."
+            : msg.includes("NotFound")
+              ? "No front camera found on this device."
+              : `Camera error: ${msg}`);
+          setStatus("init");
+        }
       }
     })();
     return () => { stopped = true; streamRef.current?.getTracks().forEach(t => t.stop()); streamRef.current = null; };
@@ -107,25 +131,13 @@ export function FaceScanner({ mode, userId, onComplete, onClose }: Props) {
     const dist = j.distance as number;
     const thresh = j.threshold as number;
     const verdict = j.verdict as string;
-    const hashMatch = j.hashMatch as boolean;
 
     if (verdict === "PASS") {
-      setResult({
-        success: true,
-        title: "PASS — Identity verified",
-        detail: `Distance: ${dist} ≤ ${thresh} (match)\nHash: ${hashMatch ? "exact match" : "slight variation (normal)"}`,
-        hash: j.faceHash as string | undefined,
-      });
+      setResult({ success: true, title: "PASS — Identity verified", detail: `Distance: ${dist} ≤ ${thresh} (match)`, hash: j.faceHash as string | undefined });
     } else {
-      setResult({
-        success: false,
-        title: "FAIL — Identity mismatch",
-        detail: res.status === 404
-          ? (j.error as string) ?? "No face enrolled"
-          : `Distance: ${dist ?? "?"} > ${thresh ?? "0.6"} (too far)\nThis face does not match the enrolled identity.`,
-      });
+      setResult({ success: false, title: "FAIL — Identity mismatch", detail: res.status === 404 ? (j.error as string) ?? "No face enrolled" : `Distance: ${dist ?? "?"} > ${thresh ?? "0.35"} (too far)` });
     }
-  }, []);
+  }, [userId]);
 
   const fire = useCallback(async () => {
     if (fired.current) return;
@@ -138,7 +150,6 @@ export function FaceScanner({ mode, userId, onComplete, onClose }: Props) {
     setStatus("done");
   }, [mode, doEnroll, doVerify]);
 
-  /* ── detection loop ── */
   useEffect(() => {
     if (!modelsLoaded || status === "scanning" || status === "done") return;
     const video = videoRef.current;
@@ -149,7 +160,6 @@ export function FaceScanner({ mode, userId, onComplete, onClose }: Props) {
 
     const tick = async () => {
       if (!running || video.paused || video.ended) return;
-
       const vw = video.videoWidth;
       const vh = video.videoHeight;
       if (!vw || !vh) return;
@@ -254,11 +264,26 @@ export function FaceScanner({ mode, userId, onComplete, onClose }: Props) {
           <span>Loading face models…</span>
         </div>
       )}
-      <div className="clear-viewport" style={{ display: modelsLoaded ? "block" : "none" }}>
-        <video ref={videoRef} autoPlay muted playsInline />
+
+      {cameraError && (
+        <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700 mt-2">
+          <p className="font-semibold">Camera error</p>
+          <p className="text-xs mt-1">{cameraError}</p>
+          <Button variant="outline" size="sm" className="mt-2" onClick={() => { setCameraError(null); setModelsLoaded(false); setTimeout(() => setModelsLoaded(true), 100); }}>Retry</Button>
+        </div>
+      )}
+
+      <div className="clear-viewport" style={{ display: modelsLoaded && !cameraError ? "block" : "none" }}>
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          playsInline
+          style={{ width: "100%", height: "auto" }}
+        />
         <canvas ref={canvasRef} />
       </div>
-      {modelsLoaded && (
+      {modelsLoaded && !cameraError && (
         <div className="max-w-[400px] mx-auto mt-3 text-center space-y-2">
           <Progress value={progress} />
           <p className="text-sm text-slate-500">
