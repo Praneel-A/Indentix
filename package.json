@@ -6,7 +6,9 @@
   ],
   "scripts": {
     "dev:api": "npm run dev -w @indentix/api",
-    "dev:web": "npm run dev -w @indentix/web"
+    "dev:web": "npm run dev -w @indentix/web",
+    "build": "npm run build -w @indentix/api",
+    "start": "npm start -w @indentix/api"
   },
   "engines": {
     "node": ">=20"
