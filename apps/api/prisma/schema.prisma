@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String   @id @default(cuid())
+  walletAddress   String   @unique @map("wallet_address")
+  didHash         String?  @map("did_hash")
+  /// Rounded 128-d face descriptor (JSON) for similarity / dedup — prototype only
+  faceEmbedding      Json?     @map("face_embedding")
+  /// keccak256(JSON.stringify(rounded embedding)) — public commitment
+  faceCommitmentHash String?   @unique @map("face_commitment_hash")
+  faceEnrolledAt     DateTime? @map("face_enrolled_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  applicant        Applicant?
+  kycSessions      KycSession[]
+  webhookEvents    WebhookEvent[]
+  onChainJobs      OnChainJob[]
+  riskAssessment   RiskAssessment?
+}
+
+model Applicant {
+  id          String    @id @default(cuid())
+  userId      String    @unique @map("user_id")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  externalId  String    @unique @map("external_id")
+  status      String
+  reviewedAt  DateTime? @map("reviewed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+}
+
+model KycSession {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider  String   @default("mock")
+  status    String
+  createdAt DateTime @default(now()) @map("created_at")
+}
+
+model RiskAssessment {
+  id          String   @id @default(cuid())
+  userId      String   @unique @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tier        String
+  eddRequired Boolean  @default(false) @map("edd_required")
+  eddStatus   String?  @map("edd_status")
+  countryCode String?  @map("country_code")
+  notes       String?
+  updatedAt   DateTime @updatedAt @map("updated_at")
+}
+
+model WebhookEvent {
+  id        String   @id @default(cuid())
+  userId    String?  @map("user_id")
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  provider  String
+  payload   Json
+  processed Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+}
+
+model OnChainJob {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String
+  status    String
+  txHash    String?  @map("tx_hash")
+  payload   Json
+  error     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+}

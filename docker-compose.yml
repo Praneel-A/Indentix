@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: indentix
+      POSTGRES_PASSWORD: indentix
+      POSTGRES_DB: indentix
+    ports:
+      - "5432:5432"
+    volumes:
+      - indentix_pg:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - indentix_redis:/data
+
+volumes:
+  indentix_pg:
+  indentix_redis:
