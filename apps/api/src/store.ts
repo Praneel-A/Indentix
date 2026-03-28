@@ -6,6 +6,9 @@ export interface AppUser {
   faceEmbedding: number[] | null;
   faceHash: string | null;
   faceEnrolledAt: string | null;
+  govIdImage: string | null;
+  govIdUploadedAt: string | null;
+  onboarded: boolean;
   trustScore: number;
   trustLevel: "TRUSTED" | "VERIFIED" | "BASIC" | "UNVERIFIED" | "SCAMMER";
   isAgent: boolean;
@@ -29,13 +32,16 @@ function id() { return Math.random().toString(36).slice(2, 10); }
 
 const DEMO_USERS: AppUser[] = [
   {
-    id: "user_mama_anna",
-    phone: "+255712345678",
-    name: "Mama Anna",
+    id: "user_praneel",
+    phone: "+14703803242",
+    name: "Praneel Anand",
     verified: true,
     faceEmbedding: null,
     faceHash: null,
     faceEnrolledAt: null,
+    govIdImage: null,
+    govIdUploadedAt: null,
+    onboarded: true,
     trustScore: 92,
     trustLevel: "TRUSTED",
     isAgent: false,
@@ -43,8 +49,8 @@ const DEMO_USERS: AppUser[] = [
     revokedAt: null,
     createdAt: "2025-01-15T08:00:00Z",
     transactions: [
-      { id: id(), from: "+255712345678", to: "+255787654321", amount: 50000, currency: "TZS", status: "confirmed", timestamp: "2026-03-27T10:30:00Z" },
-      { id: id(), from: "+255798888888", to: "+255712345678", amount: 25000, currency: "TZS", status: "confirmed", timestamp: "2026-03-26T14:15:00Z" },
+      { id: id(), from: "+14703803242", to: "+255787654321", amount: 50000, currency: "TZS", status: "confirmed", timestamp: "2026-03-27T10:30:00Z" },
+      { id: id(), from: "+255798888888", to: "+14703803242", amount: 25000, currency: "TZS", status: "confirmed", timestamp: "2026-03-26T14:15:00Z" },
     ],
   },
   {
@@ -55,6 +61,9 @@ const DEMO_USERS: AppUser[] = [
     faceEmbedding: null,
     faceHash: null,
     faceEnrolledAt: null,
+    govIdImage: null,
+    govIdUploadedAt: null,
+    onboarded: true,
     trustScore: 75,
     trustLevel: "VERIFIED",
     isAgent: false,
@@ -71,6 +80,9 @@ const DEMO_USERS: AppUser[] = [
     faceEmbedding: null,
     faceHash: null,
     faceEnrolledAt: null,
+    govIdImage: null,
+    govIdUploadedAt: null,
+    onboarded: false,
     trustScore: 5,
     trustLevel: "SCAMMER",
     isAgent: false,
@@ -89,6 +101,9 @@ const DEMO_USERS: AppUser[] = [
     faceEmbedding: null,
     faceHash: null,
     faceEnrolledAt: null,
+    govIdImage: null,
+    govIdUploadedAt: null,
+    onboarded: false,
     trustScore: 12,
     trustLevel: "UNVERIFIED",
     isAgent: true,
@@ -105,6 +120,9 @@ const DEMO_USERS: AppUser[] = [
     faceEmbedding: null,
     faceHash: null,
     faceEnrolledAt: null,
+    govIdImage: null,
+    govIdUploadedAt: null,
+    onboarded: true,
     trustScore: 88,
     trustLevel: "TRUSTED",
     isAgent: true,
@@ -133,6 +151,7 @@ class Store {
     const u: AppUser = {
       id: `user_${id()}`, phone, name, verified: false,
       faceEmbedding: null, faceHash: null, faceEnrolledAt: null,
+      govIdImage: null, govIdUploadedAt: null, onboarded: false,
       trustScore: 10, trustLevel: "UNVERIFIED",
       isAgent: false, revoked: false, revokedAt: null,
       createdAt: new Date().toISOString(), transactions: [],
@@ -145,8 +164,9 @@ class Store {
   computeTrust(u: AppUser): { score: number; level: AppUser["trustLevel"] } {
     if (u.revoked) return { score: 0, level: "UNVERIFIED" };
     let s = 0;
-    if (u.faceHash) s += 30;
-    if (u.verified) s += 40;
+    if (u.faceHash) s += 25;
+    if (u.govIdImage) s += 15;
+    if (u.verified) s += 30;
     if (u.isAgent && u.verified) s += 15;
     if (u.transactions.filter(t => t.status === "confirmed").length > 0) s += 15;
     const level: AppUser["trustLevel"] =

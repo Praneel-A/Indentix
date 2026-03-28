@@ -142,6 +142,57 @@ async function main() {
     return { ok: true, message: "Account recovered. Re-enroll face to restore trust.", user: sanitize(user) };
   });
 
+  /* ── Gov ID upload ── */
+
+  app.post("/govid/upload", async (request, reply) => {
+    const { userId, image } = request.body as { userId?: string; image?: string };
+    if (!userId || !image) return reply.status(400).send({ error: "userId and image required" });
+    const user = store.getById(userId);
+    if (!user) return reply.status(404).send({ error: "User not found" });
+    user.govIdImage = image.slice(0, 5000);
+    user.govIdUploadedAt = new Date().toISOString();
+    const t = store.computeTrust(user);
+    user.trustScore = t.score;
+    user.trustLevel = t.level;
+    return { ok: true, user: sanitize(user) };
+  });
+
+  /* ── Complete onboarding ── */
+
+  app.post("/onboarding/complete", async (request, reply) => {
+    const { userId } = request.body as { userId?: string };
+    if (!userId) return reply.status(400).send({ error: "userId required" });
+    const user = store.getById(userId);
+    if (!user) return reply.status(404).send({ error: "User not found" });
+    user.onboarded = true;
+    user.verified = true;
+    const t = store.computeTrust(user);
+    user.trustScore = t.score;
+    user.trustLevel = t.level;
+    return { ok: true, user: sanitize(user) };
+  });
+
+  /* ── Public verify page data ── */
+
+  app.get("/verify/:userId", async (request, reply) => {
+    const { userId } = request.params as { userId: string };
+    const user = store.getById(userId);
+    if (!user) return reply.status(404).send({ error: "User not found" });
+    return {
+      id: user.id,
+      name: user.name,
+      phone: user.phone.replace(/(\d{3})\d{4}(\d{3})/, "$1****$2"),
+      verified: user.verified,
+      faceEnrolled: Boolean(user.faceHash),
+      govIdUploaded: Boolean(user.govIdImage),
+      trustScore: user.trustScore,
+      trustLevel: user.trustLevel,
+      isAgent: user.isAgent,
+      revoked: user.revoked,
+      memberSince: user.createdAt,
+    };
+  });
+
   /* ── Demo helpers ── */
 
   app.get("/demo/users", async () => {
@@ -168,6 +219,8 @@ function sanitize(u: ReturnType<typeof store.getById>) {
   return {
     id: u.id, phone: u.phone, name: u.name, verified: u.verified,
     faceHash: u.faceHash, faceEnrolledAt: u.faceEnrolledAt,
+    govIdUploaded: Boolean(u.govIdImage), govIdUploadedAt: u.govIdUploadedAt,
+    onboarded: u.onboarded,
     trustScore: u.trustScore, trustLevel: u.trustLevel,
     isAgent: u.isAgent, revoked: u.revoked, revokedAt: u.revokedAt,
     createdAt: u.createdAt, transactionCount: u.transactions.length,
