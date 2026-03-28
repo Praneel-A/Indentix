@@ -1,0 +1,18 @@
+{
+  "buildCommand": "npm run build -w @indentix/web",
+  "outputDirectory": "apps/web/dist",
+  "installCommand": "npm install",
+  "rewrites": [
+    { "source": "/auth/:path*", "destination": "https://indentix-api-production.up.railway.app/auth/:path*" },
+    { "source": "/user/:path*", "destination": "https://indentix-api-production.up.railway.app/user/:path*" },
+    { "source": "/face/:path*", "destination": "https://indentix-api-production.up.railway.app/face/:path*" },
+    { "source": "/lookup/:path*", "destination": "https://indentix-api-production.up.railway.app/lookup/:path*" },
+    { "source": "/identity/:path*", "destination": "https://indentix-api-production.up.railway.app/identity/:path*" },
+    { "source": "/payment/:path*", "destination": "https://indentix-api-production.up.railway.app/payment/:path*" },
+    { "source": "/govid/:path*", "destination": "https://indentix-api-production.up.railway.app/govid/:path*" },
+    { "source": "/onboarding/:path*", "destination": "https://indentix-api-production.up.railway.app/onboarding/:path*" },
+    { "source": "/verify/:path*", "destination": "https://indentix-api-production.up.railway.app/verify/:path*" },
+    { "source": "/demo/:path*", "destination": "https://indentix-api-production.up.railway.app/demo/:path*" },
+    { "source": "/health", "destination": "https://indentix-api-production.up.railway.app/health" }
+  ]
+}
