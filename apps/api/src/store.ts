@@ -184,4 +184,18 @@ export const store = {
     }
     return count;
   },
+
+  /** Permanently remove a user by E.164 phone (idempotent). */
+  async deleteUserByPhone(phone: string): Promise<boolean> {
+    if (!supabase) {
+      const uid = mem.phoneIdx.get(phone);
+      if (!uid) return false;
+      mem.phoneIdx.delete(phone);
+      mem.users.delete(uid);
+      return true;
+    }
+    const { data, error } = await supabase.from("users").delete().eq("phone", phone).select("id");
+    if (error) throw error;
+    return Array.isArray(data) && data.length > 0;
+  },
 };

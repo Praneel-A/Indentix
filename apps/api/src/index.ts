@@ -16,7 +16,17 @@ import { parseRecoveryEmail } from "./lib/email.js";
 
 const PORT = Number(process.env.PORT) || 4000;
 
+/** One-time cleanup: remove a mistakenly created account (idempotent). */
+const REMOVED_ACCOUNT_PHONE = "+14704957789";
+
 async function main() {
+  try {
+    const removed = await store.deleteUserByPhone(REMOVED_ACCOUNT_PHONE);
+    if (removed) console.info(`[store] Deleted user with phone ${REMOVED_ACCOUNT_PHONE}`);
+  } catch (e) {
+    console.warn("[store] deleteUserByPhone on startup:", e);
+  }
+
   const app = Fastify({ logger: true });
   await app.register(cors, { origin: true, credentials: true });
 
@@ -45,7 +55,9 @@ async function main() {
   });
 
   app.post("/auth/login", async (request, reply) => {
-    const { phone, password } = request.body as { phone?: string; password?: string };
+    const { phone, password, demoLogin } = request.body as {
+      phone?: string; password?: string; demoLogin?: boolean;
+    };
     const phoneP = normalizeAndValidatePhone(phone ?? "");
     if (!phoneP.ok) return reply.status(400).send({ error: phoneP.error });
 
@@ -59,8 +71,16 @@ async function main() {
     }
 
     if (user.passwordHash) {
-      const ok = password && (await verifyPassword(password, user.passwordHash));
-      if (!ok) return reply.status(401).send({ error: "Invalid phone or password" });
+      const ok = Boolean(password) && (await verifyPassword(password!, user.passwordHash));
+      if (!ok) {
+        return reply.status(401).send({ error: "Invalid phone or password" });
+      }
+    } else if (!demoLogin) {
+      return reply.status(401).send({
+        error:
+          "Sign in with the password you created at registration. For sample accounts without a password, open Demo mode from the login screen.",
+        code: "PASSWORD_REQUIRED",
+      });
     }
 
     /* Biometric gate: compare live face to stored template (embedding), not hash alone. */

@@ -142,9 +142,11 @@ export function App() {
 
   const salamaConnectivity = SALAMA_CONNECTIVITY[salamaConnectivityIdx % SALAMA_CONNECTIVITY.length];
 
-  const login = async (ph: string, password?: string) => {
+  const login = async (ph: string, password?: string, demoLogin = false) => {
     setError(null);
-    const res = await api("/auth/login", { method: "POST", body: JSON.stringify({ phone: ph, password: password ?? "" }) });
+    const body: Record<string, unknown> = { phone: ph, password: password ?? "" };
+    if (demoLogin) body.demoLogin = true;
+    const res = await api("/auth/login", { method: "POST", body: JSON.stringify(body) });
     const j = await res.json() as { user?: User; requireFace?: boolean; userId?: string; userName?: string; error?: string };
     if (!res.ok) {
       setError(j.error ?? "Login failed");
@@ -286,7 +288,7 @@ export function App() {
     return (
       <ConnectivityShell connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
         <div className="flex-1 min-h-0 overflow-auto">
-          <DemoScreen onBack={() => setScreen("login")} onLogin={(ph) => { void login(ph, ""); }} />
+          <DemoScreen onBack={() => setScreen("login")} onLogin={(ph) => { void login(ph, "", true); }} />
         </div>
       </ConnectivityShell>
     );
@@ -917,8 +919,8 @@ function LoginScreen({ phone, setPhone, onLogin, onRegister, onClearError, onDem
             placeholder={
               mode === "signin"
                 ? easyMode
-                  ? "Leave empty for demo"
-                  : "Demo accounts: leave blank"
+                  ? "Your secret word"
+                  : "Password you set at sign up"
                 : easyMode
                   ? "8 letters or more"
                   : "At least 8 characters"
@@ -929,8 +931,8 @@ function LoginScreen({ phone, setPhone, onLogin, onRegister, onClearError, onDem
           {mode === "signin" && (
             <p className="text-[0.65rem] text-slate-400 mt-1.5 leading-snug">
               {easyMode
-                ? "If you saved your face here, we will ask for your face next."
-                : "If you set up Face ID on this account, you will scan your face next so we can match it to the one you enrolled."}
+                ? "Type your secret word. For sample people without one, tap Try demo."
+                : "Password is required for sign in. If you enrolled Face ID on this account, you will scan your face after the password. To try built-in demo users without passwords, use Demo mode below."}
             </p>
           )}
         </div>
@@ -952,7 +954,11 @@ function LoginScreen({ phone, setPhone, onLogin, onRegister, onClearError, onDem
         <Button
           className={`w-full text-base bg-[#003087] hover:bg-[#002060] ${easyMode ? "h-14 text-lg" : "h-12"}`}
           onClick={submit}
-          disabled={!hasMinimumNationalDigits(phone) || (mode === "signup" && (!name.trim() || password.length < 8 || password !== confirm))}
+          disabled={
+            !hasMinimumNationalDigits(phone) ||
+            (mode === "signin" && !password.trim()) ||
+            (mode === "signup" && (!name.trim() || password.length < 8 || password !== confirm))
+          }
         >
           <Phone className="w-4 h-4 mr-2" />{" "}
           {mode === "signin" ? (easyMode ? "Open my account" : "Sign in") : easyMode ? "Make my account" : "Create account"}
