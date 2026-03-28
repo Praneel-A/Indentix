@@ -8,6 +8,10 @@ import { FaceScanner } from "./components/FaceScanner";
 import { IndentixLogo } from "./components/IndentixLogo";
 import { QRCodeSVG } from "qrcode.react";
 import { QrScanner } from "./components/QrScanner";
+import { PhoneInput } from "./components/PhoneInput";
+import { hasMinimumNationalDigits } from "@/lib/countryCodes";
+import { normalizeAndValidatePhone } from "@/lib/phoneValidate";
+import { parseRecoveryEmailInput } from "@/lib/recoveryEmail";
 import { ConnectivityBar } from "@/components/ConnectivityBar";
 import { FraudReportScreen } from "@/screens/FraudReportScreen";
 import { IdentityCheckScreen } from "@/screens/IdentityCheckScreen";
@@ -15,6 +19,9 @@ import { OfflineModeScreen } from "@/screens/OfflineModeScreen";
 import { AgentSupportScreen } from "@/screens/AgentSupportScreen";
 import { MerchantProfileScreen } from "@/screens/MerchantProfileScreen";
 import type { Screen as SalamaScreen, ConnectivityStatus } from "@/types";
+import { useEasyMode } from "@/context/EasyModeContext";
+import { EasyModeBanner, EasyModeHomeChip } from "@/components/EasyModeBanner";
+import { SpeakAloudButton } from "@/components/SpeakAloudButton";
 import {
   ShieldCheck, ShieldAlert, ScanFace, QrCode, Send,
   AlertTriangle, Phone, UserCheck, Ban, RotateCcw,
@@ -30,6 +37,7 @@ type Tx = {
 
 type User = {
   id: string; phone: string; name: string; passwordSet?: boolean; verified: boolean;
+  recoveryEmail?: string | null;
   faceHash: string | null; faceEnrolledAt: string | null;
   govIdUploaded: boolean; govIdUploadedAt: string | null;
   onboarded: boolean; balance: number;
@@ -150,9 +158,12 @@ export function App() {
     }
   };
 
-  const register = async (name: string, ph: string, password: string) => {
+  const register = async (name: string, ph: string, password: string, recoveryEmail?: string | null) => {
     setError(null);
-    const res = await api("/auth/register", { method: "POST", body: JSON.stringify({ phone: ph, name, password }) });
+    const res = await api("/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ phone: ph, name, password, recoveryEmail: recoveryEmail ?? null }),
+    });
     const j = await res.json() as { user?: User; error?: string };
     if (!res.ok) {
       setError(j.error ?? "Could not create account");
@@ -237,7 +248,15 @@ export function App() {
     return (
       <ConnectivityShell connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
         <div className="flex-1 overflow-auto">
-          <LoginScreen phone={phone} setPhone={setPhone} onLogin={(ph, pw) => void login(ph, pw)} onRegister={(name, ph, pw) => void register(name, ph, pw)} onClearError={() => setError(null)} onDemo={() => setScreen("demo")} error={error} />
+          <LoginScreen
+            phone={phone}
+            setPhone={setPhone}
+            onLogin={(ph, pw) => void login(ph, pw)}
+            onRegister={(name, ph, pw, recoveryEmail) => void register(name, ph, pw, recoveryEmail)}
+            onClearError={() => setError(null)}
+            onDemo={() => setScreen("demo")}
+            error={error}
+          />
         </div>
       </ConnectivityShell>
     );
@@ -391,7 +410,21 @@ export function App() {
 /* ══════════════════════════════════════════════
    HOME TAB — PayPal style
    ══════════════════════════════════════════════ */
+function SendGuidedDots({ step }: { step: number }) {
+  return (
+    <div className="mb-3 flex justify-center gap-2" aria-hidden>
+      {[1, 2, 3].map((n) => (
+        <span
+          key={n}
+          className={`h-2.5 rounded-full transition-all ${n <= step ? "w-8 bg-[#003087]" : "w-2.5 bg-slate-200"}`}
+        />
+      ))}
+    </div>
+  );
+}
+
 function HomeTab({ me, setScreen, onLogout }: { me: User; setScreen: (s: Screen) => void; onLogout: () => void }) {
+  const { easyMode } = useEasyMode();
   return (
     <>
       {/* Dark header */}
@@ -412,19 +445,51 @@ function HomeTab({ me, setScreen, onLogout }: { me: User; setScreen: (s: Screen)
               </div>
             </div>
           </div>
-          <button onClick={onLogout} className="text-white/50 hover:text-white/80"><LogOut className="w-4 h-4" /></button>
+          <div className="flex items-center gap-2 shrink-0">
+            <EasyModeHomeChip />
+            <button type="button" onClick={onLogout} className="text-white/50 hover:text-white/80" aria-label="Log out">
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
-        <p className="text-xs text-white/60 uppercase tracking-wider">Indentix balance</p>
-        <p className="text-4xl font-bold mt-1">{me.balance.toLocaleString()} <span className="text-lg font-normal text-white/50">TZS</span></p>
+        <p className="text-xs text-white/60 uppercase tracking-wider">{easyMode ? "Your money" : "Indentix balance"}</p>
+        <div className="mt-1 flex items-center gap-2">
+          <p className="text-4xl font-bold">
+            {me.balance.toLocaleString()} <span className="text-lg font-normal text-white/50">TZS</span>
+          </p>
+          {easyMode && (
+            <SpeakAloudButton
+              text={`Your balance is ${me.balance.toLocaleString()} Tanzanian shillings.`}
+              label="Read balance out loud"
+              className="border-white/40 bg-white/15 text-white hover:bg-white/25"
+            />
+          )}
+        </div>
         <p className="text-xs text-white/40 mt-1">≈ ${(me.balance / 2500).toFixed(2)} USD</p>
 
         {/* Send / Request / Scan */}
         <div className="flex justify-around mt-6">
-          <NavBtn icon={<ArrowUpRight className="w-5 h-5" />} label="Send" onClick={() => setScreen("send")} />
-          <NavBtn icon={<QrCode className="w-5 h-5" />} label="Scan" onClick={() => setScreen("scan")} />
-          <NavBtn icon={<ScanFace className="w-5 h-5" />} label={me.faceHash ? "Verify" : "Face ID"} onClick={() => setScreen(me.faceHash ? "face-verify" : "face-enroll")} />
-          <NavBtn icon={<Ban className="w-5 h-5" />} label="Lock" onClick={() => setScreen("revoke")} />
+          <NavBtn
+            icon={<ArrowUpRight className="w-5 h-5" />}
+            label={easyMode ? "Pay" : "Send"}
+            onClick={() => setScreen("send")}
+          />
+          <NavBtn
+            icon={<QrCode className="w-5 h-5" />}
+            label={easyMode ? "Scan" : "Scan"}
+            onClick={() => setScreen("scan")}
+          />
+          <NavBtn
+            icon={<ScanFace className="w-5 h-5" />}
+            label={easyMode ? (me.faceHash ? "My face" : "Add face") : me.faceHash ? "Verify" : "Face ID"}
+            onClick={() => setScreen(me.faceHash ? "face-verify" : "face-enroll")}
+          />
+          <NavBtn
+            icon={<Ban className="w-5 h-5" />}
+            label={easyMode ? "Lock" : "Lock"}
+            onClick={() => setScreen("revoke")}
+          />
         </div>
       </div>
 
@@ -441,26 +506,40 @@ function HomeTab({ me, setScreen, onLogout }: { me: User; setScreen: (s: Screen)
 
         <Card className="mt-3 border-slate-200 shadow-sm">
           <CardContent className="space-y-3 pt-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Safety &amp; reports</p>
-              <p className="mt-0.5 text-sm text-slate-600">Fraud reporting and identity checks before you pay.</p>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  {easyMode ? "Stay safe" : "Safety & reports"}
+                </p>
+                <p className="mt-0.5 text-sm text-slate-600">
+                  {easyMode
+                    ? "If someone tricks you, tap Report. Before you pay a stranger, tap Check."
+                    : "Fraud reporting and identity checks before you pay."}
+                </p>
+              </div>
+              {easyMode && (
+                <SpeakAloudButton
+                  text="Stay safe. If someone cheats you, press Report fraud. Before you pay someone you do not know well, press Check identity."
+                  label="Read safety tips"
+                />
+              )}
             </div>
             <div className="grid grid-cols-2 gap-2">
               <Button type="button" variant="outline" className="h-auto flex-col gap-1 py-3" onClick={() => setScreen("fraud-report")}>
                 <Flag className="h-4 w-4" aria-hidden />
-                <span className="text-xs font-semibold">Report fraud</span>
+                <span className="text-xs font-semibold">{easyMode ? "Report" : "Report fraud"}</span>
               </Button>
               <Button type="button" variant="outline" className="h-auto flex-col gap-1 py-3" onClick={() => setScreen("fraud-check")}>
                 <ShieldCheck className="h-4 w-4" aria-hidden />
-                <span className="text-xs font-semibold">Check identity</span>
+                <span className="text-xs font-semibold">{easyMode ? "Check ID" : "Check identity"}</span>
               </Button>
               <Button type="button" variant="outline" className="h-auto flex-col gap-1 py-3" onClick={() => setScreen("fraud-queue")}>
                 <RefreshCw className="h-4 w-4" aria-hidden />
-                <span className="text-xs font-semibold">Offline queue</span>
+                <span className="text-xs font-semibold">{easyMode ? "Waiting list" : "Offline queue"}</span>
               </Button>
               <Button type="button" variant="outline" className="h-auto flex-col gap-1 py-3" onClick={() => setScreen("fraud-agent")}>
                 <UserCheck className="h-4 w-4" aria-hidden />
-                <span className="text-xs font-semibold">Agent support</span>
+                <span className="text-xs font-semibold">{easyMode ? "Help desk" : "Agent support"}</span>
               </Button>
             </div>
             <Button type="button" variant="ghost" size="sm" className="w-full text-xs" onClick={() => setScreen("fraud-merchant")}>
@@ -472,7 +551,9 @@ function HomeTab({ me, setScreen, onLogout }: { me: User; setScreen: (s: Screen)
 
         {/* Recent activity */}
         <div className="mt-2">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Recent activity</p>
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+            {easyMode ? "Latest money" : "Recent activity"}
+          </p>
           {me.transactions.length === 0 && <p className="text-sm text-slate-400">No transactions yet.</p>}
           {me.transactions.slice(0, 4).map((tx) => {
             const isSent = tx.from === me.phone;
@@ -511,25 +592,60 @@ function HomeTab({ me, setScreen, onLogout }: { me: User; setScreen: (s: Screen)
 
 /* ── Wallet Tab ── */
 function WalletTab({ me }: { me: User }) {
+  const { easyMode } = useEasyMode();
   return (
     <div className="px-5 pt-6">
-      <h2 className="text-lg font-bold mb-4">Wallet</h2>
+      <h2 className="text-lg font-bold mb-4">{easyMode ? "My details" : "Wallet"}</h2>
       <Card className="bg-gradient-to-br from-[#003087] to-[#001e5a] text-white">
         <CardContent className="pt-5 pb-5">
-          <p className="text-xs text-white/60">Indentix balance</p>
+          <p className="text-xs text-white/60">{easyMode ? "Your money" : "Indentix balance"}</p>
           <p className="text-3xl font-bold mt-1">{me.balance.toLocaleString()} TZS</p>
           <p className="text-xs text-white/40 mt-1">≈ ${(me.balance / 2500).toFixed(2)} USD</p>
         </CardContent>
       </Card>
 
       <div className="mt-5 space-y-3">
-        <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Account details</p>
-        <Row label="Phone" value={me.phone} />
-        <Row label="Trust score" value={`${me.trustScore}/100 (${me.trustLevel})`} />
-        <Row label="Face ID" value={me.faceHash ? "Enrolled" : "Not set"} color={me.faceHash ? "text-green-600" : "text-amber-500"} />
-        <Row label="Gov ID" value={me.govIdUploaded ? "Uploaded" : "Not uploaded"} color={me.govIdUploaded ? "text-green-600" : "text-amber-500"} />
-        <Row label="Status" value={me.verified ? "Verified" : me.revoked ? "Revoked" : "Unverified"} color={me.verified ? "text-green-600" : "text-red-500"} />
-        <Row label="Member since" value={new Date(me.createdAt ?? "").toLocaleDateString()} />
+        <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+          {easyMode ? "About you" : "Account details"}
+        </p>
+        <Row label={easyMode ? "Your phone" : "Phone"} value={me.phone} />
+        <Row
+          label={easyMode ? "Backup email" : "Recovery email"}
+          value={me.recoveryEmail ?? (easyMode ? "None" : "Not set")}
+          color={me.recoveryEmail ? undefined : "text-amber-600"}
+        />
+        <Row
+          label={easyMode ? "Trust" : "Trust score"}
+          value={easyMode ? `${me.trustScore} of 100` : `${me.trustScore}/100 (${me.trustLevel})`}
+        />
+        <Row
+          label={easyMode ? "Face photo" : "Face ID"}
+          value={me.faceHash ? (easyMode ? "Yes" : "Enrolled") : easyMode ? "No" : "Not set"}
+          color={me.faceHash ? "text-green-600" : "text-amber-500"}
+        />
+        <Row
+          label={easyMode ? "ID paper" : "Gov ID"}
+          value={me.govIdUploaded ? (easyMode ? "Yes" : "Uploaded") : easyMode ? "No" : "Not uploaded"}
+          color={me.govIdUploaded ? "text-green-600" : "text-amber-500"}
+        />
+        <Row
+          label={easyMode ? "Account OK?" : "Status"}
+          value={
+            me.verified
+              ? easyMode
+                ? "OK"
+                : "Verified"
+              : me.revoked
+                ? easyMode
+                  ? "Blocked"
+                  : "Revoked"
+                : easyMode
+                  ? "Wait"
+                  : "Unverified"
+          }
+          color={me.verified ? "text-green-600" : "text-red-500"}
+        />
+        <Row label={easyMode ? "Joined" : "Member since"} value={new Date(me.createdAt ?? "").toLocaleDateString()} />
         {me.faceHash && (
           <div className="pt-2">
             <p className="text-xs text-slate-400 dark:text-slate-500 mb-1">Identity hash</p>
@@ -584,11 +700,12 @@ function ActivityTab({ me }: { me: User }) {
    BOTTOM NAV — PayPal style
    ══════════════════════════════════════════════ */
 function BottomNav({ active, onNav }: { active: Screen; onNav: (s: Screen) => void }) {
+  const { easyMode } = useEasyMode();
   const items: { screen: Screen; icon: React.ReactNode; label: string }[] = [
     { screen: "home", icon: <Home className="w-5 h-5" />, label: "Home" },
-    { screen: "send", icon: <Send className="w-5 h-5" />, label: "Payments" },
-    { screen: "wallet", icon: <Wallet className="w-5 h-5" />, label: "Wallet" },
-    { screen: "activity", icon: <CreditCard className="w-5 h-5" />, label: "Activity" },
+    { screen: "send", icon: <Send className="w-5 h-5" />, label: easyMode ? "Send" : "Payments" },
+    { screen: "wallet", icon: <Wallet className="w-5 h-5" />, label: easyMode ? "Me" : "Wallet" },
+    { screen: "activity", icon: <CreditCard className="w-5 h-5" />, label: easyMode ? "List" : "Activity" },
   ];
   return (
     <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-sm bg-white border-t border-slate-200 flex justify-around py-2 z-50">
@@ -635,7 +752,7 @@ function BackButton({ onClick }: { onClick: () => void }) {
 function LoginScreen({ phone, setPhone, onLogin, onRegister, onClearError, onDemo, error }: {
   phone: string; setPhone: (v: string) => void;
   onLogin: (ph: string, password?: string) => void;
-  onRegister: (name: string, ph: string, password: string) => void;
+  onRegister: (name: string, ph: string, password: string, recoveryEmail?: string | null) => void;
   onClearError: () => void;
   onDemo: () => void; error: string | null;
 }) {
@@ -643,72 +760,201 @@ function LoginScreen({ phone, setPhone, onLogin, onRegister, onClearError, onDem
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [recoveryEmail, setRecoveryEmail] = useState("");
+  const [localError, setLocalError] = useState<string | null>(null);
+  const { easyMode } = useEasyMode();
 
   const submit = () => {
+    setLocalError(null);
+    const phoneCheck = normalizeAndValidatePhone(phone);
+    if (!phoneCheck.ok) {
+      setLocalError(phoneCheck.error);
+      return;
+    }
     if (mode === "signup") {
       if (!name.trim()) return;
       if (password.length < 8) return;
       if (password !== confirm) return;
-      onRegister(name.trim(), phone, password);
+      const em = parseRecoveryEmailInput(recoveryEmail);
+      if (!em.ok) {
+        setLocalError(em.error);
+        return;
+      }
+      onRegister(name.trim(), phoneCheck.e164, password, em.email);
       return;
     }
-    onLogin(phone, password);
+    onLogin(phoneCheck.e164, password);
   };
+
+  const loginVoiceHelp =
+    mode === "signin"
+      ? easyMode
+        ? "I already use Indentix. Put my phone number. Then tap Open my account. If the app asks for my face, I look at the camera."
+        : "Sign in with your phone number. If you use Face ID on this account, you will verify your face after tapping sign in."
+      : easyMode
+        ? "I am new. Step one: my name. Step two: my phone. Step three: secret word twice. Step four is optional backup email."
+        : "Create an account with your name, phone, password, and optional recovery email.";
 
   return (
     <Shell>
-      <div className="text-center mb-8 mt-8">
+      <EasyModeBanner />
+      <div className="text-center mb-8 mt-2">
         <div className="mx-auto mb-4 flex justify-center">
           <IndentixLogo className="h-20 w-20" />
         </div>
-        <h1 className="text-2xl font-bold text-[#003087] dark:text-sky-400">Indentix</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Trusted mobile payments for Tanzania</p>
+        <div className="flex items-start justify-center gap-2">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl font-bold text-[#003087] dark:text-sky-400">Indentix</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              {easyMode ? "Pay people with your phone. We keep it simple." : "Trusted mobile payments for Tanzania"}
+            </p>
+          </div>
+          {easyMode && <SpeakAloudButton text={loginVoiceHelp} label="Read sign-in help" className="mt-1" />}
+        </div>
       </div>
       <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 mb-4">
-        <button type="button" className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mode === "signin" ? "bg-white dark:bg-slate-950 text-[#003087] dark:text-sky-400 shadow-sm" : "text-slate-500 dark:text-slate-400"}`} onClick={() => { setMode("signin"); onClearError(); }}>Sign in</button>
-        <button type="button" className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mode === "signup" ? "bg-white dark:bg-slate-950 text-[#003087] dark:text-sky-400 shadow-sm" : "text-slate-500 dark:text-slate-400"}`} onClick={() => { setMode("signup"); onClearError(); }}>Sign up</button>
+        <button
+          type="button"
+          className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-colors ${mode === "signin" ? "bg-white dark:bg-slate-950 text-[#003087] dark:text-sky-400 shadow-sm" : "text-slate-500 dark:text-slate-400"}`}
+          onClick={() => {
+            setMode("signin");
+            setLocalError(null);
+            onClearError();
+          }}
+        >
+          {easyMode ? "I use Indentix" : "Sign in"}
+        </button>
+        <button
+          type="button"
+          className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-colors ${mode === "signup" ? "bg-white dark:bg-slate-950 text-[#003087] dark:text-sky-400 shadow-sm" : "text-slate-500 dark:text-slate-400"}`}
+          onClick={() => {
+            setMode("signup");
+            setLocalError(null);
+            onClearError();
+          }}
+        >
+          {easyMode ? "I am new" : "Sign up"}
+        </button>
       </div>
+      {easyMode && mode === "signup" && (
+        <ol className="mb-4 list-inside list-decimal space-y-1.5 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm font-medium text-amber-950">
+          <li>Your name</li>
+          <li>Your phone</li>
+          <li>Secret word, two times</li>
+          <li>Backup email — you can skip</li>
+        </ol>
+      )}
       <div className="space-y-4">
         {mode === "signup" && (
           <div>
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300 dark:text-slate-300">Full name</label>
-            <Input className="mt-1.5 h-12 text-base" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Amina Juma" autoComplete="name" />
+            <label className={`font-medium text-slate-700 dark:text-slate-300 ${easyMode ? "text-lg" : "text-sm"}`}>
+              {easyMode ? "Your name" : "Full name"}
+            </label>
+            <Input
+              className={`mt-1.5 text-base ${easyMode ? "h-14 text-lg" : "h-12"}`}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Amina Juma"
+              autoComplete="name"
+            />
+          </div>
+        )}
+        <PhoneInput
+          id="login-phone"
+          label={easyMode ? "Your phone number" : "Phone number"}
+          value={phone}
+          onChange={setPhone}
+          autoComplete="tel"
+          easyRead={easyMode}
+        />
+        {mode === "signup" && (
+          <div>
+            <label className={`font-medium text-slate-700 dark:text-slate-300 ${easyMode ? "text-lg" : "text-sm"}`}>
+              {easyMode ? "Backup email (skip if you want)" : "Recovery email (optional)"}
+            </label>
+            <Input
+              className={`mt-1.5 text-base ${easyMode ? "h-14 text-lg" : "h-12"}`}
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              value={recoveryEmail}
+              onChange={(e) => setRecoveryEmail(e.target.value)}
+            />
+            <p className="text-[0.65rem] text-slate-400 mt-1.5 leading-snug">
+              {easyMode
+                ? "Only if you lose your phone. This demo does not send mail."
+                : "Used if you lose access to your phone. We do not send email in this demo—only stored securely on your profile."}
+            </p>
           </div>
         )}
         <div>
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-300 dark:text-slate-300">Phone number</label>
-          <Input className="mt-1.5 h-12 text-base" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+255…" type="tel" autoComplete="tel" />
-        </div>
-        <div>
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-300 dark:text-slate-300">Password</label>
-          <Input className="mt-1.5 h-12 text-base" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={mode === "signin" ? "Demo accounts: leave blank" : "At least 8 characters"} type="password" autoComplete={mode === "signup" ? "new-password" : "current-password"} />
+          <label className={`font-medium text-slate-700 dark:text-slate-300 ${easyMode ? "text-lg" : "text-sm"}`}>
+            {easyMode ? "Secret word (password)" : "Password"}
+          </label>
+          <Input
+            className={`mt-1.5 text-base ${easyMode ? "h-14 text-lg" : "h-12"}`}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={
+              mode === "signin"
+                ? easyMode
+                  ? "Leave empty for demo"
+                  : "Demo accounts: leave blank"
+                : easyMode
+                  ? "8 letters or more"
+                  : "At least 8 characters"
+            }
+            type="password"
+            autoComplete={mode === "signup" ? "new-password" : "current-password"}
+          />
           {mode === "signin" && (
-            <p className="text-[0.65rem] text-slate-400 mt-1.5 leading-snug">If you set up Face ID on this account, you will scan your face next so we can match it to the one you enrolled.</p>
+            <p className="text-[0.65rem] text-slate-400 mt-1.5 leading-snug">
+              {easyMode
+                ? "If you saved your face here, we will ask for your face next."
+                : "If you set up Face ID on this account, you will scan your face next so we can match it to the one you enrolled."}
+            </p>
           )}
         </div>
         {mode === "signup" && (
           <div>
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300 dark:text-slate-300">Confirm password</label>
-            <Input className="mt-1.5 h-12 text-base" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Repeat password" type="password" autoComplete="new-password" />
+            <label className={`font-medium text-slate-700 dark:text-slate-300 ${easyMode ? "text-lg" : "text-sm"}`}>
+              {easyMode ? "Type secret word again" : "Confirm password"}
+            </label>
+            <Input
+              className={`mt-1.5 text-base ${easyMode ? "h-14 text-lg" : "h-12"}`}
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              placeholder={easyMode ? "Same as above" : "Repeat password"}
+              type="password"
+              autoComplete="new-password"
+            />
           </div>
         )}
         <Button
-          className="w-full h-12 text-base bg-[#003087] hover:bg-[#002060]"
+          className={`w-full text-base bg-[#003087] hover:bg-[#002060] ${easyMode ? "h-14 text-lg" : "h-12"}`}
           onClick={submit}
-          disabled={!phone.trim() || (mode === "signup" && (!name.trim() || password.length < 8 || password !== confirm))}
+          disabled={!hasMinimumNationalDigits(phone) || (mode === "signup" && (!name.trim() || password.length < 8 || password !== confirm))}
         >
-          <Phone className="w-4 h-4 mr-2" /> {mode === "signin" ? "Sign in" : "Create account"}
+          <Phone className="w-4 h-4 mr-2" />{" "}
+          {mode === "signin" ? (easyMode ? "Open my account" : "Sign in") : easyMode ? "Make my account" : "Create account"}
         </Button>
-        {mode === "signup" && password.length > 0 && password.length < 8 && <p className="text-xs text-amber-600 text-center">Use at least 8 characters.</p>}
-        {mode === "signup" && confirm.length > 0 && password !== confirm && <p className="text-xs text-red-500 text-center">Passwords do not match.</p>}
-        {error && <p className="text-xs text-red-500 text-center">{error}</p>}
+        {mode === "signup" && password.length > 0 && password.length < 8 && (
+          <p className="text-xs text-amber-600 text-center">{easyMode ? "Use 8 or more characters." : "Use at least 8 characters."}</p>
+        )}
+        {mode === "signup" && confirm.length > 0 && password !== confirm && (
+          <p className="text-xs text-red-500 text-center">{easyMode ? "Both secret words must match." : "Passwords do not match."}</p>
+        )}
+        {(localError || error) && (
+          <p className={`text-red-500 text-center ${easyMode ? "text-sm" : "text-xs"}`}>{localError ?? error}</p>
+        )}
         <div className="relative flex items-center gap-3 my-2">
           <div className="flex-1 h-px bg-slate-200" />
           <span className="text-xs text-slate-400">or</span>
           <div className="flex-1 h-px bg-slate-200" />
         </div>
-        <Button variant="outline" className="w-full h-11" onClick={onDemo}>
-          <Smartphone className="w-4 h-4 mr-2" /> Demo mode
+        <Button variant="outline" className={`w-full ${easyMode ? "h-14 text-base" : "h-11"}`} onClick={onDemo}>
+          <Smartphone className="w-4 h-4 mr-2" /> {easyMode ? "Try demo" : "Demo mode"}
         </Button>
       </div>
     </Shell>
@@ -730,6 +976,7 @@ function SendMoneyScreen({
   const [recipientPhone, setRecipientPhone] = useState("");
   const [recipient, setRecipient] = useState<User | null>(null);
   const [lookupDone, setLookupDone] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
   const [amount, setAmount] = useState("50000");
   const [sent, setSent] = useState(false);
   const [paymentResult, setPaymentResult] = useState<{ verified: boolean; warning?: string } | null>(null);
@@ -752,34 +999,98 @@ function SendMoneyScreen({
   }, [initialRecipientUserId, onConsumedPrefill]);
 
   const lookup = async () => {
+    setLookupError(null);
+    const phoneCheck = normalizeAndValidatePhone(recipientPhone);
+    if (!phoneCheck.ok) {
+      setLookupError(phoneCheck.error);
+      setRecipient(null);
+      setLookupDone(false);
+      return;
+    }
     setRecipient(null); setLookupDone(false);
-    const res = await api(`/lookup/phone/${encodeURIComponent(recipientPhone)}`);
+    const res = await api(`/lookup/phone/${encodeURIComponent(phoneCheck.e164)}`);
     const j = await res.json() as { user?: User };
     setRecipient(j.user ?? null);
     setLookupDone(true);
   };
 
   const isSafe = recipient && recipient.trustScore >= 50 && !recipient.revoked;
+  const { easyMode } = useEasyMode();
+  const guidedStep = sent || isSafe ? 3 : recipient ? 2 : 1;
+  const guidedHint = sent
+    ? "Done. The app says your payment was sent."
+    : isSafe && !sent
+      ? "Step three. Type how much money. Tap the big blue send button."
+      : recipient && !isSafe
+        ? "Stop. This person is not safe to pay. Ask someone you trust before you send money."
+        : lookupDone && !recipient
+          ? "We do not know this phone on Indentix. Send only if you are sure who they are."
+          : "Step one. Put the other person's phone number. Tap Check.";
+  const sendOverviewVoice =
+    "Send money in three steps. Step one: type their phone and press Check. Step two: read the name and colors. Green is safer. Red means stop. Step three: type the amount and press Send.";
 
   return (
     <Shell>
       <BackButton onClick={onBack} />
-      <h2 className="text-xl font-bold text-[#003087] dark:text-sky-400 mb-1">Send Money</h2>
-      <p className="text-sm text-slate-500 mb-4">Verify the recipient before sending.</p>
-
-      <div className="space-y-4">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Recipient phone</label>
-          <div className="flex gap-2 mt-1.5">
-            <Input className="h-11" value={recipientPhone} onChange={(e) => setRecipientPhone(e.target.value)} placeholder="+255…" />
-            <Button className="h-11 bg-[#003087] hover:bg-[#002060]" onClick={() => void lookup()}>Check</Button>
+          <h2 className="text-xl font-bold text-[#003087] dark:text-sky-400 mb-1">Send Money</h2>
+          <p className="text-sm text-slate-500">
+            {easyMode ? "Three short steps. Tap the speaker for help." : "Verify the recipient before sending."}
+          </p>
+        </div>
+        {easyMode && <SpeakAloudButton text={sendOverviewVoice} label="Read how sending works" />}
+      </div>
+      {easyMode && (
+        <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50/80 p-3 dark:border-sky-900 dark:bg-sky-950/40">
+          <SendGuidedDots step={guidedStep} />
+          <p className="text-center text-base font-semibold text-slate-800 dark:text-slate-100 leading-snug" role="status">
+            {guidedHint}
+          </p>
+          <div className="mt-2 flex justify-center">
+            <SpeakAloudButton text={guidedHint} label="Read this step out loud" />
           </div>
         </div>
+      )}
+
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <PhoneInput
+            id="send-recipient-phone"
+            label={easyMode ? "Their phone number" : "Recipient phone"}
+            value={recipientPhone}
+            onChange={(v) => {
+              setLookupError(null);
+              setRecipientPhone(v);
+            }}
+            autoComplete="off"
+            easyRead={easyMode}
+          />
+          <Button
+            className={`w-full bg-[#003087] hover:bg-[#002060] sm:w-auto sm:min-w-[7rem] ${easyMode ? "h-14 text-base" : "h-11"}`}
+            disabled={!hasMinimumNationalDigits(recipientPhone)}
+            onClick={() => void lookup()}
+          >
+            {easyMode ? "Who is this?" : "Check"}
+          </Button>
+        </div>
+        {lookupError && (
+          <p className={`text-red-600 ${easyMode ? "text-sm font-medium" : "text-xs"}`}>{lookupError}</p>
+        )}
 
         {lookupDone && !recipient && (
           <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 flex items-start gap-2">
-            <AlertTriangle className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
-            <div><p className="text-sm font-semibold text-amber-700">Unknown user</p><p className="text-xs text-amber-600">Not registered on Indentix. Proceed with caution.</p></div>
+            <AlertTriangle className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" aria-hidden />
+            <div>
+              <p className={`font-semibold text-amber-700 ${easyMode ? "text-base" : "text-sm"}`}>
+                {easyMode ? "We do not know them" : "Unknown user"}
+              </p>
+              <p className={`text-amber-600 ${easyMode ? "text-sm mt-1" : "text-xs"}`}>
+                {easyMode
+                  ? "This number is not in Indentix. Only send if you know the person well."
+                  : "Not registered on Indentix. Proceed with caution."}
+              </p>
+            </div>
           </div>
         )}
 
@@ -798,25 +1109,36 @@ function SendMoneyScreen({
               {recipient.revoked && <Badge variant="destructive">REVOKED</Badge>}
               {recipient.trustLevel === "SCAMMER" && <Badge variant="destructive">⚠ SCAMMER</Badge>}
             </div>
-            {!isSafe && <p className="text-xs text-red-700 mt-2 font-semibold">⚠ Warning: Do not send money to this user.</p>}
+            {!isSafe && (
+              <p className={`text-red-700 mt-2 font-semibold ${easyMode ? "text-sm" : "text-xs"}`}>
+                {easyMode ? "Do not pay this person. The red color means danger." : "⚠ Warning: Do not send money to this user."}
+              </p>
+            )}
           </div>
         )}
 
         {isSafe && !sent && (
           <div className="space-y-3">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Amount (TZS)</label>
-            <Input className="h-12 text-2xl font-bold text-center" value={amount} onChange={(e) => setAmount(e.target.value)} />
-            <Button className="w-full h-12 bg-[#003087] hover:bg-[#002060]" onClick={() => setSent(true)}>
-              <UserCheck className="w-4 h-4 mr-2" /> Send {Number(amount).toLocaleString()} TZS
+            <label className={`font-medium text-slate-700 dark:text-slate-300 ${easyMode ? "text-lg" : "text-sm"}`}>
+              {easyMode ? "How much? (TZS)" : "Amount (TZS)"}
+            </label>
+            <Input
+              className={`text-2xl font-bold text-center ${easyMode ? "h-14 text-3xl" : "h-12"}`}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+            <Button className={`w-full bg-[#003087] hover:bg-[#002060] ${easyMode ? "h-14 text-lg" : "h-12"}`} onClick={() => setSent(true)}>
+              <UserCheck className="w-4 h-4 mr-2" />{" "}
+              {easyMode ? `Send ${Number(amount).toLocaleString()} shillings` : `Send ${Number(amount).toLocaleString()} TZS`}
             </Button>
           </div>
         )}
 
         {sent && (
           <div className="rounded-xl bg-green-50 border border-green-200 p-6 text-center">
-            <ShieldCheck className="w-10 h-10 text-green-500 mx-auto" />
-            <p className="font-bold mt-3 text-lg">Payment sent!</p>
-            <p className="text-sm text-slate-500">To {recipient?.name}</p>
+            <ShieldCheck className="w-10 h-10 text-green-500 mx-auto" aria-hidden />
+            <p className="font-bold mt-3 text-lg">{easyMode ? "Money sent!" : "Payment sent!"}</p>
+            <p className="text-sm text-slate-500">{easyMode ? `To ${recipient?.name ?? ""}` : `To ${recipient?.name}`}</p>
           </div>
         )}
 
@@ -1000,6 +1322,11 @@ function RevokeScreen({ me, onBack }: { me: User; onBack: () => void }) {
         <Card className="border-red-200">
           <CardContent className="pt-5 space-y-4">
             <p className="text-sm">Phone stolen or SIM swapped? Lock your identity immediately.</p>
+            {me.recoveryEmail && (
+              <p className="text-xs text-slate-600 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
+                Recovery email on file: <span className="font-medium text-slate-800">{me.recoveryEmail}</span>. In production, use it with support to regain access after you secure a new SIM.
+              </p>
+            )}
             <Button variant="destructive" className="w-full h-12" onClick={async () => { const res = await api("/identity/revoke", { method: "POST", body: JSON.stringify({ userId: me.id }) }); const j = await res.json() as { message?: string }; setDone(j.message ?? "Locked"); }}>
               <Ban className="w-4 h-4 mr-2" /> Lock my identity NOW
             </Button>

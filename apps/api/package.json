@@ -15,6 +15,7 @@
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.3.1",
     "fastify": "^5.2.1",
+    "libphonenumber-js": "^1.12.41",
     "typescript": "^5.8.2",
     "viem": "^2.23.2"
   },

@@ -11,6 +11,8 @@ import {
   preciseEmbedding,
 } from "./lib/face.js";
 import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "./lib/password.js";
+import { normalizeAndValidatePhone } from "./lib/phone.js";
+import { parseRecoveryEmail } from "./lib/email.js";
 
 const PORT = Number(process.env.PORT) || 4000;
 
@@ -24,24 +26,30 @@ async function main() {
   /* ── Auth: register, password login, face gate ── */
 
   app.post("/auth/register", async (request, reply) => {
-    const { phone, name, password } = request.body as { phone?: string; name?: string; password?: string };
-    if (!phone?.trim()) return reply.status(400).send({ error: "Phone is required" });
+    const { phone, name, password, recoveryEmail } = request.body as {
+      phone?: string; name?: string; password?: string; recoveryEmail?: string;
+    };
     if (!name?.trim()) return reply.status(400).send({ error: "Name is required" });
     if (!password || password.length < MIN_PASSWORD_LENGTH) {
       return reply.status(400).send({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
     }
-    const existing = await store.getByPhone(phone.trim());
+    const phoneP = normalizeAndValidatePhone(phone ?? "");
+    if (!phoneP.ok) return reply.status(400).send({ error: phoneP.error });
+    const emailP = parseRecoveryEmail(recoveryEmail);
+    if (!emailP.ok) return reply.status(400).send({ error: emailP.error });
+    const existing = await store.getByPhone(phoneP.e164);
     if (existing) return reply.status(409).send({ error: "An account with this phone already exists. Sign in instead." });
     const passwordHash = await hashPassword(password);
-    const user = await store.createUser(phone.trim(), name.trim(), passwordHash);
+    const user = await store.createUser(phoneP.e164, name.trim(), passwordHash, emailP.email);
     return { user: sanitize(user), requireFace: false };
   });
 
   app.post("/auth/login", async (request, reply) => {
     const { phone, password } = request.body as { phone?: string; password?: string };
-    if (!phone?.trim()) return reply.status(400).send({ error: "Phone is required" });
+    const phoneP = normalizeAndValidatePhone(phone ?? "");
+    if (!phoneP.ok) return reply.status(400).send({ error: phoneP.error });
 
-    const user = await store.getByPhone(phone.trim());
+    const user = await store.getByPhone(phoneP.e164);
     if (!user) {
       return reply.status(404).send({ error: "No account for this phone. Create one with Sign up.", code: "NOT_FOUND" });
     }
@@ -103,8 +111,10 @@ async function main() {
   });
 
   app.get("/lookup/phone/:phone", async (request, reply) => {
-    const { phone } = request.params as { phone: string };
-    const u = await store.getByPhone(phone);
+    const raw = decodeURIComponent((request.params as { phone: string }).phone);
+    const phoneP = normalizeAndValidatePhone(raw);
+    if (!phoneP.ok) return reply.status(400).send({ error: phoneP.error });
+    const u = await store.getByPhone(phoneP.e164);
     if (!u) return reply.status(404).send({ error: "User not found" });
     return { user: sanitize(u) };
   });
@@ -167,7 +177,11 @@ async function main() {
 
   app.post("/payment/verify", async (request) => {
     const { transactionId, senderPhone } = request.body as { transactionId?: string; senderPhone?: string };
-    const sender = senderPhone ? await store.getByPhone(senderPhone) : null;
+    let sender = null;
+    if (senderPhone?.trim()) {
+      const sp = normalizeAndValidatePhone(senderPhone.trim());
+      if (sp.ok) sender = await store.getByPhone(sp.e164);
+    }
 
     if (sender) {
       const tx = sender.transactions.find((t) => t.id === transactionId);
@@ -286,6 +300,7 @@ function sanitize(u: AppUser | null) {
   if (!u) return null;
   return {
     id: u.id, phone: u.phone, name: u.name, passwordSet: Boolean(u.passwordHash), verified: u.verified,
+    recoveryEmail: u.recoveryEmail,
     faceHash: u.faceHash, faceEnrolledAt: u.faceEnrolledAt,
     govIdUploaded: Boolean(u.govIdImage), govIdUploadedAt: u.govIdUploadedAt,
     onboarded: u.onboarded, balance: u.balance,

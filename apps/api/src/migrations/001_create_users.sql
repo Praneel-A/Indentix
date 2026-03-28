@@ -19,6 +19,7 @@ create table if not exists users (
   revoked_at timestamptz,
   transactions jsonb default '[]'::jsonb,
   password_hash text,
+  recovery_email text,
   created_at timestamptz default now()
 );
 
