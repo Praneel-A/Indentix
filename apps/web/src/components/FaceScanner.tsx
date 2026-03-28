@@ -16,6 +16,8 @@ interface Props {
   userId?: string;
   onComplete: () => void;
   onClose: () => void;
+  /** If provided, fires with the raw embedding instead of calling the API verify endpoint. Used for face-login. */
+  onCapture?: (embedding: number[]) => void;
 }
 
 interface Result {
@@ -25,7 +27,7 @@ interface Result {
   hash?: string;
 }
 
-export function FaceScanner({ mode, userId, onComplete, onClose }: Props) {
+export function FaceScanner({ mode, userId, onComplete, onClose, onCapture }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const timerRef = useRef<number>(0);
@@ -124,6 +126,13 @@ export function FaceScanner({ mode, userId, onComplete, onClose }: Props) {
       .withFaceLandmarks().withFaceDescriptor();
     if (!d) return setResult({ success: false, title: "No face detected", detail: "Try again." });
     setProgress(80);
+
+    if (onCapture) {
+      setProgress(100);
+      onCapture(Array.from(d.descriptor));
+      return;
+    }
+
     const res = await api("/face/verify", { method: "POST", body: JSON.stringify({ userId, embedding: Array.from(d.descriptor) }) });
     const j = await res.json() as Record<string, unknown>;
     setProgress(100);

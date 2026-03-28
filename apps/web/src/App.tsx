@@ -29,7 +29,7 @@ type User = {
   createdAt: string; transactionCount: number; transactions: Tx[];
 };
 
-type Screen = "login" | "onboarding" | "home" | "send" | "scan" | "revoke" | "face-enroll" | "face-verify" | "demo" | "public-verify" | "wallet" | "activity";
+type Screen = "login" | "face-login" | "onboarding" | "home" | "send" | "scan" | "revoke" | "face-enroll" | "face-verify" | "demo" | "public-verify" | "wallet" | "activity";
 
 export function App() {
   const [screen, setScreen] = useState<Screen>("login");
@@ -37,13 +37,38 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [phone, setPhone] = useState("+14703803242");
   const [publicVerifyId, setPublicVerifyId] = useState<string | null>(null);
+  const [pendingLoginUserId, setPendingLoginUserId] = useState<string | null>(null);
+  const [pendingLoginUserName, setPendingLoginUserName] = useState<string | null>(null);
 
   const login = async (ph: string, name?: string) => {
     setError(null);
     const res = await api("/auth/login", { method: "POST", body: JSON.stringify({ phone: ph, name }) });
-    const j = await res.json() as { user?: User; error?: string };
-    if (j.user) { setMe(j.user); setScreen(j.user.onboarded ? "home" : "onboarding"); }
-    else setError(j.error ?? "Login failed");
+    const j = await res.json() as { user?: User; requireFace?: boolean; userId?: string; userName?: string; error?: string };
+    if (j.requireFace && j.userId) {
+      setPendingLoginUserId(j.userId);
+      setPendingLoginUserName(j.userName ?? null);
+      setScreen("face-login");
+    } else if (j.user) {
+      setMe(j.user);
+      setScreen(j.user.onboarded ? "home" : "onboarding");
+    } else {
+      setError(j.error ?? "Login failed");
+    }
+  };
+
+  const verifyFaceLogin = async (embedding: number[]) => {
+    if (!pendingLoginUserId) return;
+    setError(null);
+    const res = await api("/auth/verify-face", { method: "POST", body: JSON.stringify({ userId: pendingLoginUserId, embedding }) });
+    const j = await res.json() as { user?: User; verified?: boolean; error?: string; distance?: number };
+    if (j.user && j.verified) {
+      setMe(j.user);
+      setPendingLoginUserId(null);
+      setPendingLoginUserName(null);
+      setScreen(j.user.onboarded ? "home" : "onboarding");
+    } else {
+      setError(j.error ?? `Face mismatch (distance: ${j.distance ?? "?"}). Try again.`);
+    }
   };
 
   const refresh = useCallback(async () => {
@@ -57,6 +82,7 @@ export function App() {
 
   if (screen === "public-verify" && publicVerifyId) return <PublicVerifyScreen userId={publicVerifyId} onBack={() => { setPublicVerifyId(null); setScreen(me ? "home" : "login"); }} />;
   if (screen === "login") return <LoginScreen phone={phone} setPhone={setPhone} onLogin={(ph, name) => void login(ph, name)} onDemo={() => setScreen("demo")} error={error} />;
+  if (screen === "face-login") return <FaceLoginScreen userId={pendingLoginUserId!} userName={pendingLoginUserName} onVerify={(emb) => void verifyFaceLogin(emb)} onBack={() => { setPendingLoginUserId(null); setScreen("login"); }} error={error} />;
   if (!me) return null;
   if (screen === "onboarding") return <OnboardingScreen me={me} onDone={() => { void refresh(); setScreen("home"); }} />;
   if (screen === "send") return <SendMoneyScreen me={me} onBack={() => setScreen("home")} />;
@@ -790,6 +816,44 @@ function PublicVerifyScreen({ userId, onBack }: { userId: string; onBack: () => 
 }
 
 /* ── FACE SCREENS ── */
+/* ── FACE LOGIN (verify face before granting access) ── */
+function FaceLoginScreen({ userId, userName, onVerify, onBack, error }: { userId: string; userName: string | null; onVerify: (embedding: number[]) => void; onBack: () => void; error: string | null }) {
+  const [scanning, setScanning] = useState(false);
+  return (
+    <Shell>
+      <div className="text-center mt-4 mb-6">
+        <div className="w-16 h-16 mx-auto rounded-full bg-[#003087] flex items-center justify-center mb-3">
+          <ScanFace className="w-8 h-8 text-white" />
+        </div>
+        <h2 className="text-xl font-bold text-[#003087]">Verify your identity</h2>
+        <p className="text-sm text-slate-500 mt-1">Hi {userName ?? "there"}! Scan your face to log in.</p>
+      </div>
+
+      {!scanning ? (
+        <div className="space-y-3">
+          <Button className="w-full h-14 text-base bg-[#003087] hover:bg-[#002060]" onClick={() => setScanning(true)}>
+            <ScanFace className="w-5 h-5 mr-2" /> Scan my face
+          </Button>
+          {error && (
+            <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-center">
+              <ShieldAlert className="w-6 h-6 text-red-500 mx-auto mb-1" />
+              <p className="text-sm text-red-700 font-semibold">{error}</p>
+              <p className="text-xs text-red-500 mt-1">Make sure you are the account owner.</p>
+            </div>
+          )}
+          <Button variant="ghost" className="w-full text-slate-400" onClick={onBack}>
+            <ChevronLeft className="w-4 h-4 mr-1" /> Use a different account
+          </Button>
+        </div>
+      ) : (
+        <FaceScanner mode="verify" userId={userId} onComplete={() => {}} onClose={() => setScanning(false)}
+          onCapture={(embedding) => { setScanning(false); onVerify(embedding); }}
+        />
+      )}
+    </Shell>
+  );
+}
+
 function FaceEnrollScreen({ me, onDone }: { me: User; onDone: () => void }) { return <Shell><FaceScanner mode="enroll" userId={me.id} onComplete={onDone} onClose={onDone} /></Shell>; }
 function FaceVerifyScreen({ me, onDone }: { me: User; onDone: () => void }) { return <Shell><FaceScanner mode="verify" userId={me.id} onComplete={onDone} onClose={onDone} /></Shell>; }
 
