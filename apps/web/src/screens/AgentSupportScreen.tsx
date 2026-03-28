@@ -31,23 +31,23 @@ export function AgentSupportScreen({ onNavigate }: Props) {
 
   return (
     <div className="px-5 pb-6 pt-4">
-      <button type="button" onClick={() => onNavigate("home")} className="mb-4 flex items-center gap-1 text-sm font-medium text-stone-900">
+      <button type="button" onClick={() => onNavigate("home")} className="mb-4 flex items-center gap-1 text-sm font-medium text-[#003087] hover:underline">
         <ChevronLeft className="h-4 w-4" aria-hidden />
         Back
       </button>
-      <h1 className="text-xl font-bold tracking-tight text-stone-900">Agent Support</h1>
-      <p className="mt-1 text-sm text-stone-500">Assisted sessions and audit trail.</p>
+      <h1 className="text-xl font-bold text-[#003087]">Agent support</h1>
+      <p className="mt-1 text-sm text-slate-500">Assisted sessions and audit trail.</p>
 
       {!sessionActive ? (
-        <div className="mt-6 rounded-xl border border-stone-200 bg-white p-5">
-          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-stone-100">
-            <UserCheck className="h-6 w-6 text-stone-600" aria-hidden />
+        <div className="mt-6 rounded-xl border border-slate-200 bg-white p-5">
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100">
+            <UserCheck className="h-6 w-6 text-slate-600" aria-hidden />
           </div>
-          <p className="mt-4 text-base font-semibold text-stone-900">Request agent assistance</p>
-          <p className="mt-1 text-sm leading-relaxed text-stone-500">
+          <p className="mt-4 text-base font-semibold text-slate-900">Request agent assistance</p>
+          <p className="mt-1 text-sm leading-relaxed text-slate-500">
             Start a timed session so a field agent can verify your identity and file actions on your behalf.
           </p>
-          <Button className="mt-4 w-full" size="lg" onClick={() => setSessionActive(true)}>
+          <Button className="mt-4 w-full bg-[#003087] hover:bg-[#002060]" size="lg" onClick={() => setSessionActive(true)}>
             Start assisted session
           </Button>
         </div>
@@ -57,7 +57,7 @@ export function AgentSupportScreen({ onNavigate }: Props) {
           <p className="mt-1 text-xs text-emerald-600">Session code</p>
           <p className="mt-1 font-mono text-2xl font-bold tracking-widest text-emerald-900">AGT-4471</p>
           <p className="mt-3 text-sm leading-relaxed text-emerald-900">
-            Share this code only with a verified Salama agent. This session may be recorded for audit.
+            Share this code only with a verified Indentix agent. This session may be recorded for audit.
           </p>
           <Button variant="outline" className="mt-4 w-full border-emerald-300 text-emerald-900 hover:bg-emerald-100" onClick={() => setSessionActive(false)}>
             End session
@@ -66,7 +66,7 @@ export function AgentSupportScreen({ onNavigate }: Props) {
       )}
 
       <section className="mt-7">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-stone-400">Agent-assisted actions</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Agent-assisted actions</h2>
         <div className="mt-3 space-y-3">
           {[
             { icon: FileText, title: "Joint report filing", body: "Agent validates your story and attaches evidence." },
@@ -74,12 +74,12 @@ export function AgentSupportScreen({ onNavigate }: Props) {
             { icon: CheckCircle2, title: "Merchant onboarding", body: "Agent captures business details for trust baseline." },
             { icon: AlertCircle, title: "Escalation", body: "Complex cases routed to regional review." },
           ].map((x) => (
-            <div key={x.title} className="rounded-xl border border-stone-200 bg-white p-4">
+            <div key={x.title} className="rounded-xl border border-slate-200 bg-white p-4">
               <div className="flex gap-3">
-                <x.icon className="h-5 w-5 shrink-0 text-stone-500" aria-hidden />
+                <x.icon className="h-5 w-5 shrink-0 text-slate-500" aria-hidden />
                 <div>
-                  <p className="text-sm font-semibold text-stone-900">{x.title}</p>
-                  <p className="mt-1 text-sm text-stone-500">{x.body}</p>
+                  <p className="text-sm font-semibold text-slate-900">{x.title}</p>
+                  <p className="mt-1 text-sm text-slate-500">{x.body}</p>
                 </div>
               </div>
             </div>
@@ -89,14 +89,14 @@ export function AgentSupportScreen({ onNavigate }: Props) {
 
       <section className="mt-7">
         <div className="mb-3 flex items-center gap-2">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-stone-400">Audit trail</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Audit trail</h2>
           <Badge variant="secondary">{agentActions.length}</Badge>
         </div>
         <Alert variant="info" className="mb-3">
           <AlertTitle>Logged actions</AlertTitle>
           <AlertDescription>Every assisted action is stored with agent code and timestamp.</AlertDescription>
         </Alert>
-        <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           {agentActions.map((a, i) => {
             const open = expanded === a.id;
             return (
@@ -106,23 +106,23 @@ export function AgentSupportScreen({ onNavigate }: Props) {
                   type="button"
                   aria-expanded={open}
                   onClick={() => setExpanded(open ? null : a.id)}
-                  className="flex w-full flex-col gap-2 px-4 py-3.5 text-left hover:bg-stone-50"
+                  className="flex w-full flex-col gap-2 px-4 py-3.5 text-left hover:bg-slate-50"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <span className="font-mono text-xs text-stone-400">{a.id}</span>
-                    {open ? <ChevronUp className="h-4 w-4 shrink-0 text-stone-400" aria-hidden /> : <ChevronDown className="h-4 w-4 shrink-0 text-stone-400" aria-hidden />}
+                    <span className="font-mono text-xs text-slate-400">{a.id}</span>
+                    {open ? <ChevronUp className="h-4 w-4 shrink-0 text-slate-400" aria-hidden /> : <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">{actionBadge(a.actionType)}</div>
-                  <p className="text-sm font-medium text-stone-900">{a.description}</p>
-                  <p className="flex items-center gap-1 text-xs text-stone-500">
+                  <p className="text-sm font-medium text-slate-900">{a.description}</p>
+                  <p className="flex items-center gap-1 text-xs text-slate-500">
                     <UserCheck className="h-3.5 w-3.5" aria-hidden />
                     {a.agentName} · {a.agentCode}
                   </p>
-                  <p className="text-xs text-stone-400">{formatRelativeTime(a.performedAt)}</p>
+                  <p className="text-xs text-slate-400">{formatRelativeTime(a.performedAt)}</p>
                   {open && a.notes && (
-                    <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5">
-                      <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Agent note</p>
-                      <p className="mt-1 text-sm text-stone-700">{a.notes}</p>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Agent note</p>
+                      <p className="mt-1 text-sm text-slate-700">{a.notes}</p>
                     </div>
                   )}
                 </button>

@@ -28,26 +28,26 @@ export function MerchantProfileScreen({ onNavigate }: Props) {
 
   return (
     <div className="px-5 pb-6 pt-4">
-      <button type="button" onClick={() => onNavigate("home")} className="mb-4 flex items-center gap-1 text-sm font-medium text-stone-900">
+      <button type="button" onClick={() => onNavigate("home")} className="mb-4 flex items-center gap-1 text-sm font-medium text-[#003087] hover:underline">
         <ChevronLeft className="h-4 w-4" aria-hidden />
         Back
       </button>
 
       <div className="flex gap-4">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-stone-900 text-xl font-bold text-white">{initial}</div>
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[#003087] text-xl font-bold text-white">{initial}</div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-stone-900">{m.fullName}</h1>
-              <p className="font-mono text-sm text-stone-500">{m.id}</p>
+              <h1 className="text-xl font-bold text-[#003087]">{m.fullName}</h1>
+              <p className="font-mono text-sm text-slate-500">{m.id}</p>
             </div>
             <button
               type="button"
-              className="flex shrink-0 flex-col items-center rounded-xl border border-stone-200 p-3"
+              className="flex shrink-0 flex-col items-center rounded-xl border border-slate-200 p-3"
               aria-label="Show QR code"
             >
-              <QrCode className="h-6 w-6 text-stone-700" aria-hidden />
-              <span className="mt-0.5 text-[10px] font-medium text-stone-600">QR</span>
+              <QrCode className="h-6 w-6 text-slate-700" aria-hidden />
+              <span className="mt-0.5 text-[10px] font-medium text-slate-600">QR</span>
             </button>
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -62,15 +62,15 @@ export function MerchantProfileScreen({ onNavigate }: Props) {
       <RiskIndicator level={m.riskLevel} />
 
       <div className="mt-4 grid grid-cols-2 gap-3">
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Reports this month</p>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Reports this month</p>
           <p className={`mt-2 text-3xl font-bold ${reportClass}`}>{m.reportCount30d}</p>
-          {m.reportCount30d === 0 && <p className="mt-1 text-xs text-stone-500">None on record</p>}
+          {m.reportCount30d === 0 && <p className="mt-1 text-xs text-slate-500">None on record</p>}
         </div>
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Total reports</p>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total reports</p>
           <p className={`mt-2 text-3xl font-bold ${reportClass}`}>{m.totalReports}</p>
-          <p className="mt-1 text-xs text-stone-500">All time</p>
+          <p className="mt-1 text-xs text-slate-500">All time</p>
         </div>
       </div>
 
@@ -87,29 +87,29 @@ export function MerchantProfileScreen({ onNavigate }: Props) {
       />
 
       <section className="mt-6">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-stone-400">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
           <Tag className="h-3.5 w-3.5" aria-hidden />
           Business categories
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
           {m.categories.map((c) => (
-            <span key={c} className="rounded-md border border-stone-200 bg-stone-50 px-3 py-1 text-xs font-medium text-stone-600">
+            <span key={c} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
               {c}
             </span>
           ))}
         </div>
       </section>
 
-      <div className="mt-6 flex gap-4 rounded-xl border border-stone-200 p-4">
-        <div className="grid h-16 w-16 shrink-0 grid-cols-3 gap-0.5 rounded-lg border-2 border-stone-200 p-1">
+      <div className="mt-6 flex gap-4 rounded-xl border border-slate-200 p-4">
+        <div className="grid h-16 w-16 shrink-0 grid-cols-3 gap-0.5 rounded-lg border-2 border-slate-200 p-1">
           {Array.from({ length: 9 }).map((_, i) => (
-            <div key={i} className={i % 3 === 0 || i === 4 ? "bg-stone-900" : "bg-stone-200"} />
+            <div key={i} className={i % 3 === 0 || i === 4 ? "bg-[#003087]" : "bg-slate-200"} />
           ))}
         </div>
         <div>
-          <p className="text-sm font-semibold text-stone-900">Share identity for in-person transactions</p>
-          <p className="mt-1 text-xs text-stone-500">Buyers can scan your code to see this profile before paying.</p>
-          <button type="button" className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-stone-900 underline">
+          <p className="text-sm font-semibold text-slate-900">Share identity for in-person transactions</p>
+          <p className="mt-1 text-xs text-slate-500">Buyers can scan your code to see this profile before paying.</p>
+          <button type="button" className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-slate-900 underline">
             <Share2 className="h-4 w-4" aria-hidden />
             Share QR code
           </button>
@@ -129,11 +129,11 @@ export function MerchantProfileScreen({ onNavigate }: Props) {
 
 function CardList({ rows }: { rows: { k: string; v: string; mono?: boolean }[] }) {
   return (
-    <div className="mt-4 overflow-hidden rounded-xl border border-stone-200 bg-white">
+    <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
       {rows.map((r, i) => (
-        <div key={r.k} className={`flex justify-between gap-2 px-4 py-3.5 text-sm ${i > 0 ? "border-t border-stone-100" : ""}`}>
-          <span className="text-stone-500">{r.k}</span>
-          <span className={`text-right text-stone-900 ${r.mono ? "font-mono text-xs" : ""}`}>{r.v}</span>
+        <div key={r.k} className={`flex justify-between gap-2 px-4 py-3.5 text-sm ${i > 0 ? "border-t border-slate-100" : ""}`}>
+          <span className="text-slate-500">{r.k}</span>
+          <span className={`text-right text-slate-900 ${r.mono ? "font-mono text-xs" : ""}`}>{r.v}</span>
         </div>
       ))}
     </div>

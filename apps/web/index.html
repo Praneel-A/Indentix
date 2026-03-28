@@ -5,9 +5,8 @@
     <script>
       (function () {
         try {
-          var s = localStorage.getItem("indentix-theme");
-          var dark = s === "dark" || (s !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-          if (dark) document.documentElement.classList.add("dark");
+          document.documentElement.classList.remove("dark");
+          localStorage.setItem("indentix-theme", "light");
         } catch (e) {}
       })();
     </script>

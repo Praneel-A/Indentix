@@ -74,7 +74,8 @@ function mapSalamaToIndentix(s: SalamaScreen): Screen {
   return m[s];
 }
 
-function SalamaFrame({
+/** Sync status bar + Indentix column; used on every screen so connectivity state stays consistent. */
+function ConnectivityShell({
   connectivityIdx,
   setConnectivityIdx,
   lastSynced,
@@ -87,13 +88,13 @@ function SalamaFrame({
 }) {
   const connectivity = SALAMA_CONNECTIVITY[connectivityIdx % SALAMA_CONNECTIVITY.length];
   return (
-    <div className="mx-auto flex min-h-screen max-w-sm flex-col bg-stone-50 dark:bg-slate-950">
+    <div className="mx-auto flex min-h-screen w-full max-w-sm flex-col bg-white text-slate-900">
       <ConnectivityBar
         status={connectivity}
         lastSynced={lastSynced}
         onCycle={() => setConnectivityIdx((i) => (i + 1) % SALAMA_CONNECTIVITY.length)}
       />
-      <div className="flex-1 overflow-auto">{children}</div>
+      {children}
     </div>
   );
 }
@@ -209,89 +210,163 @@ export function App() {
 
   if (screen === "public-verify" && publicVerifyId) {
     return (
-      <PublicVerifyScreen
-        userId={publicVerifyId}
-        me={me}
-        onBack={() => {
-          setPublicVerifyId(null);
-          setScreen(me ? "home" : "login");
-          window.history.replaceState({}, "", "/");
-        }}
-        onSignInToSend={(uid) => {
-          try { sessionStorage.setItem(POST_LOGIN_SEND_KEY, uid); } catch { /* */ }
-          setScreen("login");
-        }}
-        onSendMoney={(uid) => {
-          setSendPrefillUserId(uid);
-          setScreen("send");
-        }}
-      />
+      <ConnectivityShell connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
+        <div className="flex-1 overflow-auto">
+          <PublicVerifyScreen
+            userId={publicVerifyId}
+            me={me}
+            onBack={() => {
+              setPublicVerifyId(null);
+              setScreen(me ? "home" : "login");
+              window.history.replaceState({}, "", "/");
+            }}
+            onSignInToSend={(uid) => {
+              try { sessionStorage.setItem(POST_LOGIN_SEND_KEY, uid); } catch { /* */ }
+              setScreen("login");
+            }}
+            onSendMoney={(uid) => {
+              setSendPrefillUserId(uid);
+              setScreen("send");
+            }}
+          />
+        </div>
+      </ConnectivityShell>
     );
   }
-  if (screen === "login") return <LoginScreen phone={phone} setPhone={setPhone} onLogin={(ph, pw) => void login(ph, pw)} onRegister={(name, ph, pw) => void register(name, ph, pw)} onClearError={() => setError(null)} onDemo={() => setScreen("demo")} error={error} />;
-  if (screen === "face-login") return <FaceLoginScreen userId={pendingLoginUserId!} userName={pendingLoginUserName} onVerify={(emb) => void verifyFaceLogin(emb)} onBack={() => { setPendingLoginUserId(null); setScreen("login"); }} error={error} />;
-  if (screen === "demo") return <DemoScreen onBack={() => setScreen("login")} onLogin={(ph) => { void login(ph, ""); }} />;
+  if (screen === "login") {
+    return (
+      <ConnectivityShell connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
+        <div className="flex-1 overflow-auto">
+          <LoginScreen phone={phone} setPhone={setPhone} onLogin={(ph, pw) => void login(ph, pw)} onRegister={(name, ph, pw) => void register(name, ph, pw)} onClearError={() => setError(null)} onDemo={() => setScreen("demo")} error={error} />
+        </div>
+      </ConnectivityShell>
+    );
+  }
+  if (screen === "face-login") {
+    return (
+      <ConnectivityShell connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
+        <div className="flex-1 overflow-auto">
+          <FaceLoginScreen userId={pendingLoginUserId!} userName={pendingLoginUserName} onVerify={(emb) => void verifyFaceLogin(emb)} onBack={() => { setPendingLoginUserId(null); setScreen("login"); }} error={error} />
+        </div>
+      </ConnectivityShell>
+    );
+  }
+  if (screen === "demo") {
+    return (
+      <ConnectivityShell connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
+        <div className="flex-1 overflow-auto">
+          <DemoScreen onBack={() => setScreen("login")} onLogin={(ph) => { void login(ph, ""); }} />
+        </div>
+      </ConnectivityShell>
+    );
+  }
   if (!me) return null;
   if (screen === "onboarding") {
     return (
-      <OnboardingScreen
-        me={me}
-        onDone={() => {
-          void refresh();
-          let pending: string | null = null;
-          try { pending = sessionStorage.getItem(POST_LOGIN_SEND_KEY); } catch { /* */ }
-          if (pending) {
-            try { sessionStorage.removeItem(POST_LOGIN_SEND_KEY); } catch { /* */ }
-            setSendPrefillUserId(pending);
-            setScreen("send");
-          } else setScreen("home");
-        }}
-      />
+      <ConnectivityShell connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
+        <div className="flex-1 overflow-auto">
+          <OnboardingScreen
+            me={me}
+            onDone={() => {
+              void refresh();
+              let pending: string | null = null;
+              try { pending = sessionStorage.getItem(POST_LOGIN_SEND_KEY); } catch { /* */ }
+              if (pending) {
+                try { sessionStorage.removeItem(POST_LOGIN_SEND_KEY); } catch { /* */ }
+                setSendPrefillUserId(pending);
+                setScreen("send");
+              } else setScreen("home");
+            }}
+          />
+        </div>
+      </ConnectivityShell>
     );
   }
-  if (screen === "scan") return <ScanScreen me={me} onBack={() => setScreen("home")} />;
-  if (screen === "revoke") return <RevokeScreen me={me} onBack={() => { void refresh(); setScreen("home"); }} />;
-  if (screen === "face-enroll") return <FaceEnrollScreen me={me} onDone={() => { void refresh(); setScreen("home"); }} />;
-  if (screen === "face-verify") return <FaceVerifyScreen me={me} onDone={() => setScreen("home")} />;
+  if (screen === "scan") {
+    return (
+      <ConnectivityShell connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
+        <div className="flex-1 overflow-auto">
+          <ScanScreen me={me} onBack={() => setScreen("home")} />
+        </div>
+      </ConnectivityShell>
+    );
+  }
+  if (screen === "revoke") {
+    return (
+      <ConnectivityShell connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
+        <div className="flex-1 overflow-auto">
+          <RevokeScreen me={me} onBack={() => { void refresh(); setScreen("home"); }} />
+        </div>
+      </ConnectivityShell>
+    );
+  }
+  if (screen === "face-enroll") {
+    return (
+      <ConnectivityShell connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
+        <div className="flex-1 overflow-auto">
+          <FaceEnrollScreen me={me} onDone={() => { void refresh(); setScreen("home"); }} />
+        </div>
+      </ConnectivityShell>
+    );
+  }
+  if (screen === "face-verify") {
+    return (
+      <ConnectivityShell connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
+        <div className="flex-1 overflow-auto">
+          <FaceVerifyScreen me={me} onDone={() => setScreen("home")} />
+        </div>
+      </ConnectivityShell>
+    );
+  }
   if (screen === "fraud-report") {
     return (
-      <SalamaFrame connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
-        <FraudReportScreen onNavigate={onSalamaNavigate} connectivity={salamaConnectivity} />
-      </SalamaFrame>
+      <ConnectivityShell connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
+        <div className="flex-1 overflow-auto">
+          <FraudReportScreen onNavigate={onSalamaNavigate} connectivity={salamaConnectivity} />
+        </div>
+      </ConnectivityShell>
     );
   }
   if (screen === "fraud-check") {
     return (
-      <SalamaFrame connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
-        <IdentityCheckScreen onNavigate={onSalamaNavigate} connectivity={salamaConnectivity} />
-      </SalamaFrame>
+      <ConnectivityShell connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
+        <div className="flex-1 overflow-auto">
+          <IdentityCheckScreen onNavigate={onSalamaNavigate} connectivity={salamaConnectivity} />
+        </div>
+      </ConnectivityShell>
     );
   }
   if (screen === "fraud-queue") {
     return (
-      <SalamaFrame connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
-        <OfflineModeScreen onNavigate={onSalamaNavigate} connectivity={salamaConnectivity} lastSynced={salamaLastSynced} />
-      </SalamaFrame>
+      <ConnectivityShell connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
+        <div className="flex-1 overflow-auto">
+          <OfflineModeScreen onNavigate={onSalamaNavigate} connectivity={salamaConnectivity} lastSynced={salamaLastSynced} />
+        </div>
+      </ConnectivityShell>
     );
   }
   if (screen === "fraud-agent") {
     return (
-      <SalamaFrame connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
-        <AgentSupportScreen onNavigate={onSalamaNavigate} />
-      </SalamaFrame>
+      <ConnectivityShell connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
+        <div className="flex-1 overflow-auto">
+          <AgentSupportScreen onNavigate={onSalamaNavigate} />
+        </div>
+      </ConnectivityShell>
     );
   }
   if (screen === "fraud-merchant") {
     return (
-      <SalamaFrame connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
-        <MerchantProfileScreen onNavigate={onSalamaNavigate} />
-      </SalamaFrame>
+      <ConnectivityShell connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
+        <div className="flex-1 overflow-auto">
+          <MerchantProfileScreen onNavigate={onSalamaNavigate} />
+        </div>
+      </ConnectivityShell>
     );
   }
 
   /* Home / Wallet / Activity / Send share the same bottom nav */
   return (
-    <div className="max-w-sm mx-auto min-h-screen bg-white dark:bg-slate-950 flex flex-col text-slate-900 dark:text-slate-100">
+    <ConnectivityShell connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
       <div className="flex-1 overflow-auto pb-20">
         {screen === "home" && <HomeTab me={me} setScreen={setScreen} onLogout={logout} />}
         {screen === "send" && (
@@ -309,7 +384,7 @@ export function App() {
         {screen === "activity" && <ActivityTab me={me} />}
       </div>
       <BottomNav active={screen} onNav={setScreen} />
-    </div>
+    </ConnectivityShell>
   );
 }
 
@@ -364,11 +439,11 @@ function HomeTab({ me, setScreen, onLogout }: { me: User; setScreen: (s: Screen)
           {me.revoked && <Badge variant="destructive">REVOKED</Badge>}
         </div>
 
-        <Card className="mt-3 border-stone-200 dark:border-slate-800">
+        <Card className="mt-3 border-slate-200 shadow-sm">
           <CardContent className="space-y-3 pt-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Salama</p>
-              <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">Fraud reporting and identity checks for Tanzania mobile commerce.</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Safety &amp; reports</p>
+              <p className="mt-0.5 text-sm text-slate-600">Fraud reporting and identity checks before you pay.</p>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <Button type="button" variant="outline" className="h-auto flex-col gap-1 py-3" onClick={() => setScreen("fraud-report")}>
@@ -397,8 +472,8 @@ function HomeTab({ me, setScreen, onLogout }: { me: User; setScreen: (s: Screen)
 
         {/* Recent activity */}
         <div className="mt-2">
-          <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Recent activity</p>
-          {me.transactions.length === 0 && <p className="text-sm text-slate-400 dark:text-slate-500">No transactions yet.</p>}
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Recent activity</p>
+          {me.transactions.length === 0 && <p className="text-sm text-slate-400">No transactions yet.</p>}
           {me.transactions.slice(0, 4).map((tx) => {
             const isSent = tx.from === me.phone;
             return (
@@ -516,11 +591,11 @@ function BottomNav({ active, onNav }: { active: Screen; onNav: (s: Screen) => vo
     { screen: "activity", icon: <CreditCard className="w-5 h-5" />, label: "Activity" },
   ];
   return (
-    <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-sm bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 flex justify-around py-2 z-50">
+    <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-sm bg-white border-t border-slate-200 flex justify-around py-2 z-50">
       {items.map((it) => {
         const isActive = active === it.screen;
         return (
-          <button key={it.screen} onClick={() => onNav(it.screen)} className={`flex flex-col items-center gap-0.5 py-1 px-3 ${isActive ? "text-[#003087] dark:text-sky-400" : "text-slate-400 dark:text-slate-500"}`}>
+          <button key={it.screen} type="button" onClick={() => onNav(it.screen)} className={`flex flex-col items-center gap-0.5 py-1 px-3 ${isActive ? "text-[#003087]" : "text-slate-400"}`}>
             {it.icon}
             <span className="text-[0.6rem] font-semibold">{it.label}</span>
           </button>
@@ -549,11 +624,11 @@ function TrustDot({ level }: { level: string }) {
    ══════════════════════════════════════════════ */
 
 function Shell({ children }: { children: React.ReactNode }) {
-  return <div className="max-w-sm mx-auto px-5 py-6 min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">{children}</div>;
+  return <div className="px-5 py-6">{children}</div>;
 }
 
 function BackButton({ onClick }: { onClick: () => void }) {
-  return <button onClick={onClick} className="flex items-center gap-1 text-sm text-[#003087] dark:text-sky-400 mb-4 hover:underline"><ChevronLeft className="w-4 h-4" /> Back</button>;
+  return <button type="button" onClick={onClick} className="flex items-center gap-1 text-sm text-[#003087] mb-4 hover:underline"><ChevronLeft className="w-4 h-4" /> Back</button>;
 }
 
 /* ── LOGIN ── */

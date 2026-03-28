@@ -51,16 +51,16 @@ export function IdentityCheckScreen({ onNavigate, connectivity }: Props) {
 
   return (
     <div className="px-5 pb-6 pt-4">
-      <button type="button" onClick={() => onNavigate("home")} className="mb-4 flex items-center gap-1 text-sm font-medium text-stone-900">
+      <button type="button" onClick={() => onNavigate("home")} className="mb-4 flex items-center gap-1 text-sm font-medium text-[#003087] hover:underline">
         <ChevronLeft className="h-4 w-4" aria-hidden />
         Back
       </button>
-      <h1 className="text-xl font-bold tracking-tight text-stone-900">Check Identity</h1>
-      <p className="mt-1 text-sm text-stone-500">Search phone or merchant ID before you pay.</p>
+      <h1 className="text-xl font-bold text-[#003087]">Check identity</h1>
+      <p className="mt-1 text-sm text-slate-500">Search phone or merchant ID before you pay.</p>
 
       <div className="mt-5 flex gap-2">
         <div className="relative min-w-0 flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" aria-hidden />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden />
           <Input
             className="pl-11"
             placeholder="Search…"
@@ -71,7 +71,7 @@ export function IdentityCheckScreen({ onNavigate, connectivity }: Props) {
         </div>
         <Button
           type="button"
-          className="h-12 w-12 shrink-0 p-0"
+          className="h-12 w-12 shrink-0 bg-[#003087] p-0 hover:bg-[#002060] disabled:opacity-40"
           disabled={!query.trim()}
           onClick={runSearch}
           aria-label="Search"
@@ -108,11 +108,11 @@ export function IdentityCheckScreen({ onNavigate, connectivity }: Props) {
         <div className="mt-6 space-y-4">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="font-mono text-base font-semibold text-stone-900">{formatPhone(result.phone)}</p>
-              {result.merchantId && <p className="font-mono text-xs text-stone-500">{result.merchantId}</p>}
+              <p className="font-mono text-base font-semibold text-slate-900">{formatPhone(result.phone)}</p>
+              {result.merchantId && <p className="font-mono text-xs text-slate-500">{result.merchantId}</p>}
               {result.name && (
-                <p className="mt-1 flex items-center gap-1 text-sm text-stone-700">
-                  <User className="h-4 w-4 text-stone-400" aria-hidden />
+                <p className="mt-1 flex items-center gap-1 text-sm text-slate-700">
+                  <User className="h-4 w-4 text-slate-400" aria-hidden />
                   {result.name}
                 </p>
               )}
@@ -125,35 +125,35 @@ export function IdentityCheckScreen({ onNavigate, connectivity }: Props) {
           <RiskIndicator level={result.riskLevel} />
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl border border-stone-200 bg-white p-4">
-              <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Identity</p>
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Identity</p>
               <div className="mt-2">
                 <VerificationBadge state={result.verificationState} />
               </div>
             </div>
-            <div className="rounded-xl border border-stone-200 bg-white p-4">
-              <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Reports (30 days)</p>
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Reports (30 days)</p>
               <p className={`mt-2 text-3xl font-bold ${reportCountClass(result.reportCount30d)}`}>{result.reportCount30d}</p>
             </div>
           </div>
 
           <Card>
-            <CardContent className="divide-y divide-stone-100 px-5 py-0">
+            <CardContent className="divide-y divide-slate-100 px-5 py-0">
               <div className="flex justify-between py-3.5 text-sm">
-                <span className="text-stone-500">Total reports on record</span>
-                <span className="font-medium text-stone-900">{result.totalReports}</span>
+                <span className="text-slate-500">Total reports on record</span>
+                <span className="font-medium text-slate-900">{result.totalReports}</span>
               </div>
               {result.activeSince && (
                 <div className="flex justify-between py-3.5 text-sm">
-                  <span className="text-stone-500">Active since</span>
-                  <span className="text-stone-900">
+                  <span className="text-slate-500">Active since</span>
+                  <span className="text-slate-900">
                     {new Date(result.activeSince).toLocaleDateString("en-GB", { month: "long", year: "numeric" })}
                   </span>
                 </div>
               )}
               <div className="flex items-center justify-between py-3.5 text-sm">
-                <span className="text-stone-500">Last synced</span>
-                <span className={`flex items-center gap-1 font-medium ${result.isFromCache ? "text-amber-700" : "text-stone-900"}`}>
+                <span className="text-slate-500">Last synced</span>
+                <span className={`flex items-center gap-1 font-medium ${result.isFromCache ? "text-amber-700" : "text-slate-900"}`}>
                   <Clock className="h-3.5 w-3.5" aria-hidden />
                   {formatRelativeTime(result.lastSynced)}
                   {result.isFromCache && <span className="text-xs">(cache)</span>}
@@ -162,7 +162,7 @@ export function IdentityCheckScreen({ onNavigate, connectivity }: Props) {
             </CardContent>
           </Card>
 
-          <div className="rounded-xl border border-stone-200 bg-stone-50 px-4 py-3.5 text-sm leading-relaxed text-stone-700">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm leading-relaxed text-slate-700">
             Risk signal only. This result reflects reports filed in this network and cached signals. It is not legal or financial advice.
           </div>
 
@@ -176,8 +176,8 @@ export function IdentityCheckScreen({ onNavigate, connectivity }: Props) {
         <div className="mt-6">
           <Card>
             <CardContent className="p-5">
-              <p className="text-sm font-medium text-stone-900">No match</p>
-              <p className="mt-1 text-sm text-stone-500">Try another number or pick a recent check below.</p>
+              <p className="text-sm font-medium text-slate-900">No match</p>
+              <p className="mt-1 text-sm text-slate-500">Try another number or pick a recent check below.</p>
             </CardContent>
           </Card>
         </div>
@@ -185,15 +185,15 @@ export function IdentityCheckScreen({ onNavigate, connectivity }: Props) {
 
       {(!searched || !result) && (
         <section className="mt-7">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-stone-400">How to check</h2>
-          <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-stone-700">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">How to check</h2>
+          <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-slate-700">
             <li>Enter the seller&apos;s M-Pesa or Airtel Money number.</li>
             <li>Review risk level and verification before you send cash.</li>
             <li>File a report if something looks wrong.</li>
           </ol>
 
-          <h2 className="mt-6 text-xs font-semibold uppercase tracking-widest text-stone-400">Recent checks</h2>
-          <div className="mt-2 overflow-hidden rounded-xl border border-stone-200 bg-white">
+          <h2 className="mt-6 text-xs font-semibold uppercase tracking-widest text-slate-400">Recent checks</h2>
+          <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white">
             {identityResults.map((r, i) => (
               <button
                 key={r.phone + i}
@@ -203,11 +203,11 @@ export function IdentityCheckScreen({ onNavigate, connectivity }: Props) {
                   setSearched(true);
                   setResult(r);
                 }}
-                className="flex w-full items-center justify-between gap-2 border-t border-stone-100 px-4 py-3.5 text-left first:border-t-0 hover:bg-stone-50"
+                className="flex w-full items-center justify-between gap-2 border-t border-slate-100 px-4 py-3.5 text-left first:border-t-0 hover:bg-slate-50"
               >
                 <div>
-                  <p className="font-mono text-sm text-stone-900">{formatPhone(r.phone)}</p>
-                  <p className="text-xs text-stone-500">{r.name ?? "No name on file"}</p>
+                  <p className="font-mono text-sm text-slate-900">{formatPhone(r.phone)}</p>
+                  <p className="text-xs text-slate-500">{r.name ?? "No name on file"}</p>
                 </div>
                 <RiskBadge level={r.riskLevel} size="sm" />
               </button>
