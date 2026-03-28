@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, type Dispatch, type SetStateAction } from "react";
 import { api } from "./api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,11 +8,19 @@ import { FaceScanner } from "./components/FaceScanner";
 import { IndentixLogo } from "./components/IndentixLogo";
 import { QRCodeSVG } from "qrcode.react";
 import { QrScanner } from "./components/QrScanner";
+import { ConnectivityBar } from "@/components/ConnectivityBar";
+import { FraudReportScreen } from "@/screens/FraudReportScreen";
+import { IdentityCheckScreen } from "@/screens/IdentityCheckScreen";
+import { OfflineModeScreen } from "@/screens/OfflineModeScreen";
+import { AgentSupportScreen } from "@/screens/AgentSupportScreen";
+import { MerchantProfileScreen } from "@/screens/MerchantProfileScreen";
+import type { Screen as SalamaScreen, ConnectivityStatus } from "@/types";
 import {
   ShieldCheck, ShieldAlert, ScanFace, QrCode, Send,
   AlertTriangle, Phone, UserCheck, Ban, RotateCcw,
   Smartphone, Search, ChevronLeft, LogOut, Home,
   Wallet, ArrowUpRight, ArrowDownLeft, CreditCard, Camera,
+  Flag, Store, RefreshCw,
 } from "lucide-react";
 
 type Tx = {
@@ -30,9 +38,65 @@ type User = {
   createdAt: string; transactionCount: number; transactions: Tx[];
 };
 
-type Screen = "login" | "face-login" | "onboarding" | "home" | "send" | "scan" | "revoke" | "face-enroll" | "face-verify" | "demo" | "public-verify" | "wallet" | "activity";
+type Screen =
+  | "login"
+  | "face-login"
+  | "onboarding"
+  | "home"
+  | "send"
+  | "scan"
+  | "revoke"
+  | "face-enroll"
+  | "face-verify"
+  | "demo"
+  | "public-verify"
+  | "wallet"
+  | "activity"
+  | "fraud-report"
+  | "fraud-check"
+  | "fraud-queue"
+  | "fraud-agent"
+  | "fraud-merchant";
 
 const POST_LOGIN_SEND_KEY = "indentix_post_login_send_user_id";
+
+const SALAMA_CONNECTIVITY: ConnectivityStatus[] = ["online", "weak", "offline"];
+
+function mapSalamaToIndentix(s: SalamaScreen): Screen {
+  const m: Record<SalamaScreen, Screen> = {
+    home: "home",
+    report: "fraud-report",
+    check: "fraud-check",
+    offline: "fraud-queue",
+    agent: "fraud-agent",
+    merchant: "fraud-merchant",
+  };
+  return m[s];
+}
+
+function SalamaFrame({
+  connectivityIdx,
+  setConnectivityIdx,
+  lastSynced,
+  children,
+}: {
+  connectivityIdx: number;
+  setConnectivityIdx: Dispatch<SetStateAction<number>>;
+  lastSynced: Date;
+  children: React.ReactNode;
+}) {
+  const connectivity = SALAMA_CONNECTIVITY[connectivityIdx % SALAMA_CONNECTIVITY.length];
+  return (
+    <div className="mx-auto flex min-h-screen max-w-sm flex-col bg-stone-50 dark:bg-slate-950">
+      <ConnectivityBar
+        status={connectivity}
+        lastSynced={lastSynced}
+        onCycle={() => setConnectivityIdx((i) => (i + 1) % SALAMA_CONNECTIVITY.length)}
+      />
+      <div className="flex-1 overflow-auto">{children}</div>
+    </div>
+  );
+}
 
 function parseVerifyPath(): string | null {
   if (typeof window === "undefined") return null;
@@ -44,13 +108,18 @@ export function App() {
   const [screen, setScreen] = useState<Screen>(() => (parseVerifyPath() ? "public-verify" : "login"));
   const [me, setMe] = useState<User | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [phone, setPhone] = useState("+14703803242");
+  const [phone, setPhone] = useState("");
   const [publicVerifyId, setPublicVerifyId] = useState<string | null>(() => parseVerifyPath());
   const [sendPrefillUserId, setSendPrefillUserId] = useState<string | null>(null);
   const [pendingLoginUserId, setPendingLoginUserId] = useState<string | null>(null);
   const [pendingLoginUserName, setPendingLoginUserName] = useState<string | null>(null);
+  const [salamaConnectivityIdx, setSalamaConnectivityIdx] = useState(0);
+  const salamaLastSynced = useMemo(() => new Date(Date.now() - 14 * 60000), []);
 
   const clearSendPrefill = useCallback(() => setSendPrefillUserId(null), []);
+  const onSalamaNavigate = useCallback((s: SalamaScreen) => setScreen(mapSalamaToIndentix(s)), []);
+
+  const salamaConnectivity = SALAMA_CONNECTIVITY[salamaConnectivityIdx % SALAMA_CONNECTIVITY.length];
 
   const login = async (ph: string, password?: string) => {
     setError(null);
@@ -161,6 +230,7 @@ export function App() {
   }
   if (screen === "login") return <LoginScreen phone={phone} setPhone={setPhone} onLogin={(ph, pw) => void login(ph, pw)} onRegister={(name, ph, pw) => void register(name, ph, pw)} onClearError={() => setError(null)} onDemo={() => setScreen("demo")} error={error} />;
   if (screen === "face-login") return <FaceLoginScreen userId={pendingLoginUserId!} userName={pendingLoginUserName} onVerify={(emb) => void verifyFaceLogin(emb)} onBack={() => { setPendingLoginUserId(null); setScreen("login"); }} error={error} />;
+  if (screen === "demo") return <DemoScreen onBack={() => setScreen("login")} onLogin={(ph) => { void login(ph, ""); }} />;
   if (!me) return null;
   if (screen === "onboarding") {
     return (
@@ -179,30 +249,62 @@ export function App() {
       />
     );
   }
-  if (screen === "send") {
-    return (
-      <SendMoneyScreen
-        me={me}
-        initialRecipientUserId={sendPrefillUserId}
-        onConsumedPrefill={clearSendPrefill}
-        onBack={() => {
-          clearSendPrefill();
-          setScreen("home");
-        }}
-      />
-    );
-  }
   if (screen === "scan") return <ScanScreen me={me} onBack={() => setScreen("home")} />;
   if (screen === "revoke") return <RevokeScreen me={me} onBack={() => { void refresh(); setScreen("home"); }} />;
   if (screen === "face-enroll") return <FaceEnrollScreen me={me} onDone={() => { void refresh(); setScreen("home"); }} />;
   if (screen === "face-verify") return <FaceVerifyScreen me={me} onDone={() => setScreen("home")} />;
-  if (screen === "demo") return <DemoScreen onBack={() => setScreen("login")} onLogin={(ph) => { void login(ph, ""); }} />;
+  if (screen === "fraud-report") {
+    return (
+      <SalamaFrame connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
+        <FraudReportScreen onNavigate={onSalamaNavigate} connectivity={salamaConnectivity} />
+      </SalamaFrame>
+    );
+  }
+  if (screen === "fraud-check") {
+    return (
+      <SalamaFrame connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
+        <IdentityCheckScreen onNavigate={onSalamaNavigate} connectivity={salamaConnectivity} />
+      </SalamaFrame>
+    );
+  }
+  if (screen === "fraud-queue") {
+    return (
+      <SalamaFrame connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
+        <OfflineModeScreen onNavigate={onSalamaNavigate} connectivity={salamaConnectivity} lastSynced={salamaLastSynced} />
+      </SalamaFrame>
+    );
+  }
+  if (screen === "fraud-agent") {
+    return (
+      <SalamaFrame connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
+        <AgentSupportScreen onNavigate={onSalamaNavigate} />
+      </SalamaFrame>
+    );
+  }
+  if (screen === "fraud-merchant") {
+    return (
+      <SalamaFrame connectivityIdx={salamaConnectivityIdx} setConnectivityIdx={setSalamaConnectivityIdx} lastSynced={salamaLastSynced}>
+        <MerchantProfileScreen onNavigate={onSalamaNavigate} />
+      </SalamaFrame>
+    );
+  }
 
-  /* Home / Wallet / Activity share the same bottom nav */
+  /* Home / Wallet / Activity / Send share the same bottom nav */
   return (
     <div className="max-w-sm mx-auto min-h-screen bg-white dark:bg-slate-950 flex flex-col text-slate-900 dark:text-slate-100">
       <div className="flex-1 overflow-auto pb-20">
         {screen === "home" && <HomeTab me={me} setScreen={setScreen} onLogout={logout} />}
+        {screen === "send" && (
+          <SendMoneyScreen
+            me={me}
+            initialRecipientUserId={sendPrefillUserId}
+            onConsumedPrefill={clearSendPrefill}
+            onBack={() => {
+              clearSendPrefill();
+              setScreen("home");
+            }}
+          />
+        )}
         {screen === "wallet" && <WalletTab me={me} />}
         {screen === "activity" && <ActivityTab me={me} />}
       </div>
@@ -261,6 +363,37 @@ function HomeTab({ me, setScreen, onLogout }: { me: User; setScreen: (s: Screen)
           {me.isAgent && <Badge variant="outline">Agent</Badge>}
           {me.revoked && <Badge variant="destructive">REVOKED</Badge>}
         </div>
+
+        <Card className="mt-3 border-stone-200 dark:border-slate-800">
+          <CardContent className="space-y-3 pt-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Salama</p>
+              <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">Fraud reporting and identity checks for Tanzania mobile commerce.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Button type="button" variant="outline" className="h-auto flex-col gap-1 py-3" onClick={() => setScreen("fraud-report")}>
+                <Flag className="h-4 w-4" aria-hidden />
+                <span className="text-xs font-semibold">Report fraud</span>
+              </Button>
+              <Button type="button" variant="outline" className="h-auto flex-col gap-1 py-3" onClick={() => setScreen("fraud-check")}>
+                <ShieldCheck className="h-4 w-4" aria-hidden />
+                <span className="text-xs font-semibold">Check identity</span>
+              </Button>
+              <Button type="button" variant="outline" className="h-auto flex-col gap-1 py-3" onClick={() => setScreen("fraud-queue")}>
+                <RefreshCw className="h-4 w-4" aria-hidden />
+                <span className="text-xs font-semibold">Offline queue</span>
+              </Button>
+              <Button type="button" variant="outline" className="h-auto flex-col gap-1 py-3" onClick={() => setScreen("fraud-agent")}>
+                <UserCheck className="h-4 w-4" aria-hidden />
+                <span className="text-xs font-semibold">Agent support</span>
+              </Button>
+            </div>
+            <Button type="button" variant="ghost" size="sm" className="w-full text-xs" onClick={() => setScreen("fraud-merchant")}>
+              <Store className="mr-1 h-4 w-4" aria-hidden />
+              Merchant profile (demo)
+            </Button>
+          </CardContent>
+        </Card>
 
         {/* Recent activity */}
         <div className="mt-2">
@@ -487,7 +620,7 @@ function LoginScreen({ phone, setPhone, onLogin, onRegister, onClearError, onDem
         <Button
           className="w-full h-12 text-base bg-[#003087] hover:bg-[#002060]"
           onClick={submit}
-          disabled={mode === "signup" && (!name.trim() || password.length < 8 || password !== confirm)}
+          disabled={!phone.trim() || (mode === "signup" && (!name.trim() || password.length < 8 || password !== confirm))}
         >
           <Phone className="w-4 h-4 mr-2" /> {mode === "signin" ? "Sign in" : "Create account"}
         </Button>

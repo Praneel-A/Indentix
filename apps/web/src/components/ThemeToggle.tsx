@@ -7,12 +7,12 @@ export function ThemeToggle() {
   const { dark, toggle } = useTheme();
   return (
     <div className="fixed top-3 left-0 right-0 z-[60] flex justify-center pointer-events-none">
-      <div className="w-full max-w-sm flex justify-end pr-4 pointer-events-auto">
+      <div className="flex w-full max-w-sm justify-end pr-4">
         <Button
           type="button"
           variant="outline"
           size="icon"
-          className="h-9 w-9 rounded-full border-slate-200 bg-white/90 shadow-sm backdrop-blur-sm dark:border-slate-600 dark:bg-slate-800/90"
+          className="pointer-events-auto h-9 w-9 rounded-full border-slate-200 bg-white/90 shadow-sm backdrop-blur-sm dark:border-slate-600 dark:bg-slate-800/90"
           onClick={toggle}
           aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
         >
