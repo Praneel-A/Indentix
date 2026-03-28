@@ -6,6 +6,7 @@ import {
   averageEmbeddings,
   embeddingToCommitment,
   euclideanDistance,
+  hasStoredFaceDescriptor,
   MATCH_THRESHOLD,
   preciseEmbedding,
 } from "./lib/face.js";
@@ -45,12 +46,17 @@ async function main() {
       return reply.status(404).send({ error: "No account for this phone. Create one with Sign up.", code: "NOT_FOUND" });
     }
 
+    if (user.revoked) {
+      return reply.status(403).send({ error: "This account is locked. Use recovery after you regain your phone." });
+    }
+
     if (user.passwordHash) {
       const ok = password && (await verifyPassword(password, user.passwordHash));
       if (!ok) return reply.status(401).send({ error: "Invalid phone or password" });
     }
 
-    if (user.faceHash) {
+    /* Biometric gate: compare live face to stored template (embedding), not hash alone. */
+    if (hasStoredFaceDescriptor(user.faceEmbedding)) {
       return { user: null, requireFace: true, userId: user.id, userName: user.name };
     }
 
@@ -62,10 +68,18 @@ async function main() {
     if (!userId || !embedding) return reply.status(400).send({ error: "userId and embedding required" });
 
     const user = await store.getById(userId);
-    if (!user?.faceEmbedding) return reply.status(404).send({ error: "No face enrolled for this account" });
+    if (!user) return reply.status(404).send({ error: "User not found" });
+    if (!hasStoredFaceDescriptor(user.faceEmbedding)) {
+      return reply.status(404).send({ error: "No face enrolled for this account" });
+    }
 
+    if (user.revoked) {
+      return reply.status(403).send({ error: "This account is locked. Recover identity before signing in." });
+    }
+
+    const storedTemplate = user.faceEmbedding as number[];
     const incoming = preciseEmbedding(embedding);
-    const distance = euclideanDistance(user.faceEmbedding, incoming);
+    const distance = euclideanDistance(storedTemplate, incoming);
     const match = distance <= MATCH_THRESHOLD;
 
     if (!match) {
@@ -226,9 +240,9 @@ async function main() {
     return { ok: true, user: sanitize(updated) };
   });
 
-  /* ── Public verify page data ── */
+  /* ── Public verify page data (JSON for SPA; path must not collide with /verify/:id HTML route) ── */
 
-  app.get("/verify/:userId", async (request, reply) => {
+  app.get("/public/verify/:userId", async (request, reply) => {
     const { userId } = request.params as { userId: string };
     const user = await store.getById(userId);
     if (!user) return reply.status(404).send({ error: "User not found" });

@@ -8,8 +8,9 @@
     { "source": "/payment/:path*", "destination": "https://indentix-api-production.up.railway.app/payment/:path*" },
     { "source": "/govid/:path*", "destination": "https://indentix-api-production.up.railway.app/govid/:path*" },
     { "source": "/onboarding/:path*", "destination": "https://indentix-api-production.up.railway.app/onboarding/:path*" },
-    { "source": "/verify/:path*", "destination": "https://indentix-api-production.up.railway.app/verify/:path*" },
+    { "source": "/public/verify/:path*", "destination": "https://indentix-api-production.up.railway.app/public/verify/:path*" },
     { "source": "/demo/:path*", "destination": "https://indentix-api-production.up.railway.app/demo/:path*" },
+    { "source": "/verify/:path*", "destination": "/index.html" },
     { "source": "/health", "destination": "https://indentix-api-production.up.railway.app/health" }
   ]
 }

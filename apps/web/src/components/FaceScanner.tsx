@@ -146,7 +146,7 @@ export function FaceScanner({ mode, userId, onComplete, onClose, onCapture }: Pr
     } else {
       setResult({ success: false, title: "FAIL — Identity mismatch", detail: res.status === 404 ? (j.error as string) ?? "No face enrolled" : `Distance: ${dist ?? "?"} > ${thresh ?? "0.35"} (too far)` });
     }
-  }, [userId]);
+  }, [userId, onCapture]);
 
   const fire = useCallback(async () => {
     if (fired.current) return;

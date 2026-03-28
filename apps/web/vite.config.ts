@@ -21,7 +21,7 @@ export default defineConfig({
       "/payment": { target: "http://127.0.0.1:4000", changeOrigin: true },
       "/govid": { target: "http://127.0.0.1:4000", changeOrigin: true },
       "/onboarding": { target: "http://127.0.0.1:4000", changeOrigin: true },
-      "/verify": { target: "http://127.0.0.1:4000", changeOrigin: true },
+      "/public/verify": { target: "http://127.0.0.1:4000", changeOrigin: true },
       "/demo": { target: "http://127.0.0.1:4000", changeOrigin: true },
       "/health": { target: "http://127.0.0.1:4000", changeOrigin: true },
     },

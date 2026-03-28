@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ── CLEAR-style face scanner (needs absolute positioning — keep as plain CSS) ── */
 
 .clear-scanner { text-align: center; }

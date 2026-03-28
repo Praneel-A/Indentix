@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { FaceScanner } from "./components/FaceScanner";
+import { IndentixLogo } from "./components/IndentixLogo";
 import { QRCodeSVG } from "qrcode.react";
 import { QrScanner } from "./components/QrScanner";
 import {
@@ -31,14 +32,25 @@ type User = {
 
 type Screen = "login" | "face-login" | "onboarding" | "home" | "send" | "scan" | "revoke" | "face-enroll" | "face-verify" | "demo" | "public-verify" | "wallet" | "activity";
 
+const POST_LOGIN_SEND_KEY = "indentix_post_login_send_user_id";
+
+function parseVerifyPath(): string | null {
+  if (typeof window === "undefined") return null;
+  const m = window.location.pathname.match(/^\/verify\/([a-zA-Z0-9_]+)\/?$/);
+  return m ? m[1] : null;
+}
+
 export function App() {
-  const [screen, setScreen] = useState<Screen>("login");
+  const [screen, setScreen] = useState<Screen>(() => (parseVerifyPath() ? "public-verify" : "login"));
   const [me, setMe] = useState<User | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [phone, setPhone] = useState("+14703803242");
-  const [publicVerifyId, setPublicVerifyId] = useState<string | null>(null);
+  const [publicVerifyId, setPublicVerifyId] = useState<string | null>(() => parseVerifyPath());
+  const [sendPrefillUserId, setSendPrefillUserId] = useState<string | null>(null);
   const [pendingLoginUserId, setPendingLoginUserId] = useState<string | null>(null);
   const [pendingLoginUserName, setPendingLoginUserName] = useState<string | null>(null);
+
+  const clearSendPrefill = useCallback(() => setSendPrefillUserId(null), []);
 
   const login = async (ph: string, password?: string) => {
     setError(null);
@@ -54,7 +66,15 @@ export function App() {
       setScreen("face-login");
     } else if (j.user) {
       setMe(j.user);
-      setScreen(j.user.onboarded ? "home" : "onboarding");
+      if (j.user.onboarded) {
+        let pending: string | null = null;
+        try { pending = sessionStorage.getItem(POST_LOGIN_SEND_KEY); } catch { /* */ }
+        if (pending) {
+          try { sessionStorage.removeItem(POST_LOGIN_SEND_KEY); } catch { /* */ }
+          setSendPrefillUserId(pending);
+          setScreen("send");
+        } else setScreen("home");
+      } else setScreen("onboarding");
     } else {
       setError(j.error ?? "Login failed");
     }
@@ -70,7 +90,15 @@ export function App() {
     }
     if (j.user) {
       setMe(j.user);
-      setScreen(j.user.onboarded ? "home" : "onboarding");
+      if (j.user.onboarded) {
+        let pending: string | null = null;
+        try { pending = sessionStorage.getItem(POST_LOGIN_SEND_KEY); } catch { /* */ }
+        if (pending) {
+          try { sessionStorage.removeItem(POST_LOGIN_SEND_KEY); } catch { /* */ }
+          setSendPrefillUserId(pending);
+          setScreen("send");
+        } else setScreen("home");
+      } else setScreen("onboarding");
     }
   };
 
@@ -87,7 +115,15 @@ export function App() {
       setMe(j.user);
       setPendingLoginUserId(null);
       setPendingLoginUserName(null);
-      setScreen(j.user.onboarded ? "home" : "onboarding");
+      if (j.user.onboarded) {
+        let pending: string | null = null;
+        try { pending = sessionStorage.getItem(POST_LOGIN_SEND_KEY); } catch { /* */ }
+        if (pending) {
+          try { sessionStorage.removeItem(POST_LOGIN_SEND_KEY); } catch { /* */ }
+          setSendPrefillUserId(pending);
+          setScreen("send");
+        } else setScreen("home");
+      } else setScreen("onboarding");
     } else {
       setError(j.error ?? `Face mismatch (distance: ${j.distance ?? "?"}). Try again.`);
     }
@@ -102,12 +138,60 @@ export function App() {
 
   const logout = () => { setMe(null); setScreen("login"); };
 
-  if (screen === "public-verify" && publicVerifyId) return <PublicVerifyScreen userId={publicVerifyId} onBack={() => { setPublicVerifyId(null); setScreen(me ? "home" : "login"); }} />;
+  if (screen === "public-verify" && publicVerifyId) {
+    return (
+      <PublicVerifyScreen
+        userId={publicVerifyId}
+        me={me}
+        onBack={() => {
+          setPublicVerifyId(null);
+          setScreen(me ? "home" : "login");
+          window.history.replaceState({}, "", "/");
+        }}
+        onSignInToSend={(uid) => {
+          try { sessionStorage.setItem(POST_LOGIN_SEND_KEY, uid); } catch { /* */ }
+          setScreen("login");
+        }}
+        onSendMoney={(uid) => {
+          setSendPrefillUserId(uid);
+          setScreen("send");
+        }}
+      />
+    );
+  }
   if (screen === "login") return <LoginScreen phone={phone} setPhone={setPhone} onLogin={(ph, pw) => void login(ph, pw)} onRegister={(name, ph, pw) => void register(name, ph, pw)} onClearError={() => setError(null)} onDemo={() => setScreen("demo")} error={error} />;
   if (screen === "face-login") return <FaceLoginScreen userId={pendingLoginUserId!} userName={pendingLoginUserName} onVerify={(emb) => void verifyFaceLogin(emb)} onBack={() => { setPendingLoginUserId(null); setScreen("login"); }} error={error} />;
   if (!me) return null;
-  if (screen === "onboarding") return <OnboardingScreen me={me} onDone={() => { void refresh(); setScreen("home"); }} />;
-  if (screen === "send") return <SendMoneyScreen me={me} onBack={() => setScreen("home")} />;
+  if (screen === "onboarding") {
+    return (
+      <OnboardingScreen
+        me={me}
+        onDone={() => {
+          void refresh();
+          let pending: string | null = null;
+          try { pending = sessionStorage.getItem(POST_LOGIN_SEND_KEY); } catch { /* */ }
+          if (pending) {
+            try { sessionStorage.removeItem(POST_LOGIN_SEND_KEY); } catch { /* */ }
+            setSendPrefillUserId(pending);
+            setScreen("send");
+          } else setScreen("home");
+        }}
+      />
+    );
+  }
+  if (screen === "send") {
+    return (
+      <SendMoneyScreen
+        me={me}
+        initialRecipientUserId={sendPrefillUserId}
+        onConsumedPrefill={clearSendPrefill}
+        onBack={() => {
+          clearSendPrefill();
+          setScreen("home");
+        }}
+      />
+    );
+  }
   if (screen === "scan") return <ScanScreen me={me} onBack={() => setScreen("home")} />;
   if (screen === "revoke") return <RevokeScreen me={me} onBack={() => { void refresh(); setScreen("home"); }} />;
   if (screen === "face-enroll") return <FaceEnrollScreen me={me} onDone={() => { void refresh(); setScreen("home"); }} />;
@@ -116,7 +200,7 @@ export function App() {
 
   /* Home / Wallet / Activity share the same bottom nav */
   return (
-    <div className="max-w-sm mx-auto min-h-screen bg-white flex flex-col">
+    <div className="max-w-sm mx-auto min-h-screen bg-white dark:bg-slate-950 flex flex-col text-slate-900 dark:text-slate-100">
       <div className="flex-1 overflow-auto pb-20">
         {screen === "home" && <HomeTab me={me} setScreen={setScreen} onLogout={logout} />}
         {screen === "wallet" && <WalletTab me={me} />}
@@ -137,6 +221,9 @@ function HomeTab({ me, setScreen, onLogout }: { me: User; setScreen: (s: Screen)
       <div className="bg-[#003087] text-white px-5 pt-6 pb-8 rounded-b-3xl">
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
+            <div className="h-9 w-9 shrink-0 rounded-lg bg-white/15 flex items-center justify-center p-1">
+              <IndentixLogo className="h-7 w-7" />
+            </div>
             <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-sm font-bold">
               {me.name.split(" ").map(n => n[0]).join("")}
             </div>
@@ -177,24 +264,24 @@ function HomeTab({ me, setScreen, onLogout }: { me: User; setScreen: (s: Screen)
 
         {/* Recent activity */}
         <div className="mt-2">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Recent activity</p>
-          {me.transactions.length === 0 && <p className="text-sm text-slate-400">No transactions yet.</p>}
+          <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Recent activity</p>
+          {me.transactions.length === 0 && <p className="text-sm text-slate-400 dark:text-slate-500">No transactions yet.</p>}
           {me.transactions.slice(0, 4).map((tx) => {
             const isSent = tx.from === me.phone;
             return (
-              <div key={tx.id} className="flex items-center gap-3 py-2.5 border-b border-slate-100 last:border-0">
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center ${isSent ? "bg-red-50" : "bg-green-50"}`}>
+              <div key={tx.id} className="flex items-center gap-3 py-2.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center ${isSent ? "bg-red-50 dark:bg-red-950/50" : "bg-green-50 dark:bg-green-950/50"}`}>
                   {isSent ? <ArrowUpRight className="w-4 h-4 text-red-500" /> : <ArrowDownLeft className="w-4 h-4 text-green-500" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{isSent ? `To ${tx.to}` : `From ${tx.from}`}</p>
-                  <p className="text-[0.65rem] text-slate-400">{new Date(tx.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {tx.status === "fake" ? "⚠ Flagged" : tx.status}</p>
+                  <p className="text-[0.65rem] text-slate-400 dark:text-slate-500">{new Date(tx.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {tx.status === "fake" ? "⚠ Flagged" : tx.status}</p>
                 </div>
                 <div className="text-right">
-                  <p className={`text-sm font-semibold ${isSent ? "text-slate-900" : "text-green-600"}`}>
+                  <p className={`text-sm font-semibold ${isSent ? "text-slate-900 dark:text-slate-100" : "text-green-600 dark:text-green-400"}`}>
                     {isSent ? "-" : "+"}{tx.amount.toLocaleString()}
                   </p>
-                  <p className="text-[0.6rem] text-slate-400">{tx.currency}</p>
+                  <p className="text-[0.6rem] text-slate-400 dark:text-slate-500">{tx.currency}</p>
                 </div>
               </div>
             );
@@ -204,9 +291,9 @@ function HomeTab({ me, setScreen, onLogout }: { me: User; setScreen: (s: Screen)
         {/* QR */}
         <Card className="mt-2">
           <CardContent className="pt-4 text-center">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Your QR code</p>
-            <QRCodeSVG value={`${window.location.origin}/verify/${me.id}`} size={120} />
-            <p className="text-[0.6rem] text-slate-300 mt-2 break-all">{window.location.origin}/verify/{me.id}</p>
+            <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Your QR code</p>
+            <QRCodeSVG value={`${window.location.origin}/verify/${me.id}`} size={120} className="mx-auto rounded-lg bg-white p-1" />
+            <p className="text-[0.6rem] text-slate-300 dark:text-slate-500 mt-2 break-all">{window.location.origin}/verify/{me.id}</p>
           </CardContent>
         </Card>
       </div>
@@ -228,7 +315,7 @@ function WalletTab({ me }: { me: User }) {
       </Card>
 
       <div className="mt-5 space-y-3">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Account details</p>
+        <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Account details</p>
         <Row label="Phone" value={me.phone} />
         <Row label="Trust score" value={`${me.trustScore}/100 (${me.trustLevel})`} />
         <Row label="Face ID" value={me.faceHash ? "Enrolled" : "Not set"} color={me.faceHash ? "text-green-600" : "text-amber-500"} />
@@ -237,8 +324,8 @@ function WalletTab({ me }: { me: User }) {
         <Row label="Member since" value={new Date(me.createdAt ?? "").toLocaleDateString()} />
         {me.faceHash && (
           <div className="pt-2">
-            <p className="text-xs text-slate-400 mb-1">Identity hash</p>
-            <code className="text-[0.6rem] text-slate-400 break-all">{me.faceHash}</code>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mb-1">Identity hash</p>
+            <code className="text-[0.6rem] text-slate-400 dark:text-slate-500 break-all">{me.faceHash}</code>
           </div>
         )}
       </div>
@@ -248,9 +335,9 @@ function WalletTab({ me }: { me: User }) {
 
 function Row({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div className="flex justify-between items-center py-1.5 border-b border-slate-100">
-      <span className="text-sm text-slate-500">{label}</span>
-      <span className={`text-sm font-medium ${color ?? "text-slate-900"}`}>{value}</span>
+    <div className="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-800">
+      <span className="text-sm text-slate-500 dark:text-slate-400">{label}</span>
+      <span className={`text-sm font-medium ${color ?? "text-slate-900 dark:text-slate-100"}`}>{value}</span>
     </div>
   );
 }
@@ -260,20 +347,20 @@ function ActivityTab({ me }: { me: User }) {
   return (
     <div className="px-5 pt-6">
       <h2 className="text-lg font-bold mb-4">Activity</h2>
-      {me.transactions.length === 0 && <p className="text-sm text-slate-400">No transactions yet.</p>}
+      {me.transactions.length === 0 && <p className="text-sm text-slate-400 dark:text-slate-500">No transactions yet.</p>}
       {me.transactions.map((tx) => {
         const isSent = tx.from === me.phone;
         return (
-          <div key={tx.id} className="flex items-center gap-3 py-3 border-b border-slate-100">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isSent ? "bg-red-50" : "bg-green-50"}`}>
+          <div key={tx.id} className="flex items-center gap-3 py-3 border-b border-slate-100 dark:border-slate-800">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isSent ? "bg-red-50 dark:bg-red-950/50" : "bg-green-50 dark:bg-green-950/50"}`}>
               {isSent ? <ArrowUpRight className="w-4 h-4 text-red-500" /> : <ArrowDownLeft className="w-4 h-4 text-green-500" />}
             </div>
             <div className="flex-1">
               <p className="text-sm font-medium">{isSent ? `Sent to ${tx.to}` : `Received from ${tx.from}`}</p>
-              <p className="text-xs text-slate-400">{new Date(tx.timestamp).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · {new Date(tx.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">{new Date(tx.timestamp).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · {new Date(tx.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
             </div>
             <div className="text-right">
-              <p className={`text-sm font-bold ${isSent ? "text-slate-900" : "text-green-600"}`}>
+              <p className={`text-sm font-bold ${isSent ? "text-slate-900 dark:text-slate-100" : "text-green-600 dark:text-green-400"}`}>
                 {isSent ? "-" : "+"}{tx.amount.toLocaleString()} {tx.currency}
               </p>
               <Badge variant={tx.status === "confirmed" ? "success" : tx.status === "fake" ? "destructive" : "warning"} className="text-[0.55rem] mt-0.5">{tx.status}</Badge>
@@ -296,11 +383,11 @@ function BottomNav({ active, onNav }: { active: Screen; onNav: (s: Screen) => vo
     { screen: "activity", icon: <CreditCard className="w-5 h-5" />, label: "Activity" },
   ];
   return (
-    <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-sm bg-white border-t border-slate-200 flex justify-around py-2 z-50">
+    <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-sm bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 flex justify-around py-2 z-50">
       {items.map((it) => {
         const isActive = active === it.screen;
         return (
-          <button key={it.screen} onClick={() => onNav(it.screen)} className={`flex flex-col items-center gap-0.5 py-1 px-3 ${isActive ? "text-[#003087]" : "text-slate-400"}`}>
+          <button key={it.screen} onClick={() => onNav(it.screen)} className={`flex flex-col items-center gap-0.5 py-1 px-3 ${isActive ? "text-[#003087] dark:text-sky-400" : "text-slate-400 dark:text-slate-500"}`}>
             {it.icon}
             <span className="text-[0.6rem] font-semibold">{it.label}</span>
           </button>
@@ -329,11 +416,11 @@ function TrustDot({ level }: { level: string }) {
    ══════════════════════════════════════════════ */
 
 function Shell({ children }: { children: React.ReactNode }) {
-  return <div className="max-w-sm mx-auto px-5 py-6 min-h-screen bg-white">{children}</div>;
+  return <div className="max-w-sm mx-auto px-5 py-6 min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">{children}</div>;
 }
 
 function BackButton({ onClick }: { onClick: () => void }) {
-  return <button onClick={onClick} className="flex items-center gap-1 text-sm text-[#003087] mb-4 hover:underline"><ChevronLeft className="w-4 h-4" /> Back</button>;
+  return <button onClick={onClick} className="flex items-center gap-1 text-sm text-[#003087] dark:text-sky-400 mb-4 hover:underline"><ChevronLeft className="w-4 h-4" /> Back</button>;
 }
 
 /* ── LOGIN ── */
@@ -363,34 +450,37 @@ function LoginScreen({ phone, setPhone, onLogin, onRegister, onClearError, onDem
   return (
     <Shell>
       <div className="text-center mb-8 mt-8">
-        <div className="w-16 h-16 mx-auto rounded-2xl bg-[#003087] flex items-center justify-center mb-4">
-          <ShieldCheck className="w-8 h-8 text-white" />
+        <div className="mx-auto mb-4 flex justify-center">
+          <IndentixLogo className="h-20 w-20" />
         </div>
-        <h1 className="text-2xl font-bold text-[#003087]">Indentix</h1>
-        <p className="text-sm text-slate-500 mt-1">Trusted mobile payments for Tanzania</p>
+        <h1 className="text-2xl font-bold text-[#003087] dark:text-sky-400">Indentix</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Trusted mobile payments for Tanzania</p>
       </div>
-      <div className="flex rounded-xl bg-slate-100 p-1 mb-4">
-        <button type="button" className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mode === "signin" ? "bg-white text-[#003087] shadow-sm" : "text-slate-500"}`} onClick={() => { setMode("signin"); onClearError(); }}>Sign in</button>
-        <button type="button" className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mode === "signup" ? "bg-white text-[#003087] shadow-sm" : "text-slate-500"}`} onClick={() => { setMode("signup"); onClearError(); }}>Sign up</button>
+      <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 mb-4">
+        <button type="button" className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mode === "signin" ? "bg-white dark:bg-slate-950 text-[#003087] dark:text-sky-400 shadow-sm" : "text-slate-500 dark:text-slate-400"}`} onClick={() => { setMode("signin"); onClearError(); }}>Sign in</button>
+        <button type="button" className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mode === "signup" ? "bg-white dark:bg-slate-950 text-[#003087] dark:text-sky-400 shadow-sm" : "text-slate-500 dark:text-slate-400"}`} onClick={() => { setMode("signup"); onClearError(); }}>Sign up</button>
       </div>
       <div className="space-y-4">
         {mode === "signup" && (
           <div>
-            <label className="text-sm font-medium text-slate-700">Full name</label>
+            <label className="text-sm font-medium text-slate-700 dark:text-slate-300 dark:text-slate-300">Full name</label>
             <Input className="mt-1.5 h-12 text-base" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Amina Juma" autoComplete="name" />
           </div>
         )}
         <div>
-          <label className="text-sm font-medium text-slate-700">Phone number</label>
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300 dark:text-slate-300">Phone number</label>
           <Input className="mt-1.5 h-12 text-base" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+255…" type="tel" autoComplete="tel" />
         </div>
         <div>
-          <label className="text-sm font-medium text-slate-700">Password</label>
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300 dark:text-slate-300">Password</label>
           <Input className="mt-1.5 h-12 text-base" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={mode === "signin" ? "Demo accounts: leave blank" : "At least 8 characters"} type="password" autoComplete={mode === "signup" ? "new-password" : "current-password"} />
+          {mode === "signin" && (
+            <p className="text-[0.65rem] text-slate-400 mt-1.5 leading-snug">If you set up Face ID on this account, you will scan your face next so we can match it to the one you enrolled.</p>
+          )}
         </div>
         {mode === "signup" && (
           <div>
-            <label className="text-sm font-medium text-slate-700">Confirm password</label>
+            <label className="text-sm font-medium text-slate-700 dark:text-slate-300 dark:text-slate-300">Confirm password</label>
             <Input className="mt-1.5 h-12 text-base" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Repeat password" type="password" autoComplete="new-password" />
           </div>
         )}
@@ -418,13 +508,40 @@ function LoginScreen({ phone, setPhone, onLogin, onRegister, onClearError, onDem
 }
 
 /* ── SEND MONEY ── */
-function SendMoneyScreen({ me: _me, onBack }: { me: User; onBack: () => void }) {
+function SendMoneyScreen({
+  me: _me,
+  onBack,
+  initialRecipientUserId,
+  onConsumedPrefill,
+}: {
+  me: User;
+  onBack: () => void;
+  initialRecipientUserId?: string | null;
+  onConsumedPrefill?: () => void;
+}) {
   const [recipientPhone, setRecipientPhone] = useState("");
   const [recipient, setRecipient] = useState<User | null>(null);
   const [lookupDone, setLookupDone] = useState(false);
   const [amount, setAmount] = useState("50000");
   const [sent, setSent] = useState(false);
   const [paymentResult, setPaymentResult] = useState<{ verified: boolean; warning?: string } | null>(null);
+
+  useEffect(() => {
+    if (!initialRecipientUserId) return;
+    let cancelled = false;
+    void (async () => {
+      const res = await api(`/user/${initialRecipientUserId}`);
+      const j = await res.json() as { user?: User };
+      if (cancelled) return;
+      if (j.user) {
+        setRecipientPhone(j.user.phone);
+        setRecipient(j.user);
+        setLookupDone(true);
+      }
+      onConsumedPrefill?.();
+    })();
+    return () => { cancelled = true; };
+  }, [initialRecipientUserId, onConsumedPrefill]);
 
   const lookup = async () => {
     setRecipient(null); setLookupDone(false);
@@ -439,12 +556,12 @@ function SendMoneyScreen({ me: _me, onBack }: { me: User; onBack: () => void }) 
   return (
     <Shell>
       <BackButton onClick={onBack} />
-      <h2 className="text-xl font-bold text-[#003087] mb-1">Send Money</h2>
+      <h2 className="text-xl font-bold text-[#003087] dark:text-sky-400 mb-1">Send Money</h2>
       <p className="text-sm text-slate-500 mb-4">Verify the recipient before sending.</p>
 
       <div className="space-y-4">
         <div>
-          <label className="text-sm font-medium text-slate-700">Recipient phone</label>
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Recipient phone</label>
           <div className="flex gap-2 mt-1.5">
             <Input className="h-11" value={recipientPhone} onChange={(e) => setRecipientPhone(e.target.value)} placeholder="+255…" />
             <Button className="h-11 bg-[#003087] hover:bg-[#002060]" onClick={() => void lookup()}>Check</Button>
@@ -479,7 +596,7 @@ function SendMoneyScreen({ me: _me, onBack }: { me: User; onBack: () => void }) 
 
         {isSafe && !sent && (
           <div className="space-y-3">
-            <label className="text-sm font-medium text-slate-700">Amount (TZS)</label>
+            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Amount (TZS)</label>
             <Input className="h-12 text-2xl font-bold text-center" value={amount} onChange={(e) => setAmount(e.target.value)} />
             <Button className="w-full h-12 bg-[#003087] hover:bg-[#002060]" onClick={() => setSent(true)}>
               <UserCheck className="w-4 h-4 mr-2" /> Send {Number(amount).toLocaleString()} TZS
@@ -555,7 +672,7 @@ function ScanScreen({ me: _me, onBack }: { me: User; onBack: () => void }) {
   return (
     <Shell>
       <BackButton onClick={onBack} />
-      <h2 className="text-xl font-bold text-[#003087] mb-1">Scan & Pay</h2>
+      <h2 className="text-xl font-bold text-[#003087] dark:text-sky-400 mb-1">Scan & Pay</h2>
       <p className="text-sm text-slate-500 mb-4">Scan a QR code to verify identity and send money.</p>
 
       {scanning ? (
@@ -603,7 +720,7 @@ function ScanScreen({ me: _me, onBack }: { me: User; onBack: () => void }) {
         <div className="space-y-4">
           <div className={`rounded-2xl border-2 p-5 ${isSafe ? "border-green-300 bg-green-50" : "border-red-300 bg-red-50"}`}>
             <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-white flex items-center justify-center text-lg font-bold text-[#003087] shadow-sm">
+              <div className="w-14 h-14 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center text-lg font-bold text-[#003087] dark:text-sky-400 shadow-sm">
                 {result.name.split(" ").map(n => n[0]).join("")}
               </div>
               <div className="flex-1">
@@ -632,7 +749,7 @@ function ScanScreen({ me: _me, onBack }: { me: User; onBack: () => void }) {
           {isSafe && !sent && (
             <Card>
               <CardContent className="pt-5 space-y-3">
-                <p className="text-sm font-semibold text-[#003087]">Send money to {result.name}</p>
+                <p className="text-sm font-semibold text-[#003087] dark:text-sky-400">Send money to {result.name}</p>
                 <div>
                   <label className="text-xs text-slate-500">Amount (TZS)</label>
                   <Input className="h-12 text-2xl font-bold text-center mt-1" value={sendAmount} onChange={(e) => setSendAmount(e.target.value)} />
@@ -730,11 +847,11 @@ function OnboardingScreen({ me: initialMe, onDone }: { me: User; onDone: () => v
       <div className="flex items-center justify-between mb-6 px-2">
         {STEPS.map((s, i) => (
           <div key={i} className="flex flex-col items-center flex-1">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm ${i < step ? "bg-green-500 text-white" : i === step ? "bg-[#003087] text-white" : "bg-slate-100 text-slate-400"}`}>
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm ${i < step ? "bg-green-500 text-white" : i === step ? "bg-[#003087] text-white" : "bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500"}`}>
               {i < step ? "✓" : s.icon}
             </div>
-            <span className={`text-[0.6rem] mt-1 font-semibold ${i <= step ? "text-[#003087]" : "text-slate-400"}`}>{s.label}</span>
-            <span className="text-[0.55rem] text-slate-400">{s.points}</span>
+            <span className={`text-[0.6rem] mt-1 font-semibold ${i <= step ? "text-[#003087] dark:text-sky-400" : "text-slate-400 dark:text-slate-500"}`}>{s.label}</span>
+            <span className="text-[0.55rem] text-slate-400 dark:text-slate-500">{s.points}</span>
             {i < STEPS.length - 1 && <div className={`absolute`} />}
           </div>
         ))}
@@ -819,8 +936,8 @@ function OnboardingScreen({ me: initialMe, onDone }: { me: User; onDone: () => v
             <p className="text-sm text-slate-500">Share your QR code so others can verify you before transacting.</p>
 
             {/* Final trust score preview */}
-            <div className="rounded-xl bg-slate-50 p-4">
-              <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Your trust score</p>
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-900 p-4">
+              <p className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Your trust score</p>
               <TrustRing score={me.trustScore + 30} level="VERIFIED" size={70} />
               <div className="flex justify-center gap-2 mt-2">
                 {me.faceHash && <Badge variant="success">Face ID ✓</Badge>}
@@ -846,18 +963,47 @@ function OnboardingScreen({ me: initialMe, onDone }: { me: User; onDone: () => v
 }
 
 /* ── PUBLIC VERIFY ── */
-function PublicVerifyScreen({ userId, onBack }: { userId: string; onBack: () => void }) {
+function PublicVerifyScreen({
+  userId,
+  me,
+  onBack,
+  onSignInToSend,
+  onSendMoney,
+}: {
+  userId: string;
+  me: User | null;
+  onBack: () => void;
+  onSignInToSend: (userId: string) => void;
+  onSendMoney: (userId: string) => void;
+}) {
   const [data, setData] = useState<{ name: string; phone: string; verified: boolean; faceEnrolled: boolean; govIdUploaded: boolean; trustScore: number; trustLevel: string; isAgent: boolean; revoked: boolean; memberSince: string } | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { void (async () => { const res = await api(`/verify/${userId}`); if (res.ok) setData(await res.json() as typeof data); else setErr("User not found"); })(); }, [userId]);
+  useEffect(() => {
+    void (async () => {
+      const res = await api(`/public/verify/${userId}`);
+      if (res.ok) setData(await res.json() as typeof data);
+      else setErr("User not found");
+    })();
+  }, [userId]);
+
+  const isSafe = data && data.trustScore >= 50 && !data.revoked;
 
   return (
     <Shell>
       <BackButton onClick={onBack} />
+      <div className="flex justify-center mb-2">
+        <IndentixLogo className="h-12 w-12" />
+      </div>
+      <p className="text-center text-sm text-slate-500 mb-1">Verify before you pay</p>
       {err && <div className="text-center mt-8"><ShieldAlert className="w-12 h-12 text-red-500 mx-auto" /><p className="font-bold text-red-600 mt-3 text-lg">{err}</p></div>}
       {data && (
         <div className="text-center space-y-4 mt-4">
-          <TrustRing score={data.trustScore} level={data.trustLevel} size={100} />
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/50 p-5">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Trust</p>
+            <TrustRing score={data.trustScore} level={data.trustLevel} size={100} />
+            <p className="mt-3 text-lg font-bold text-[#003087] dark:text-sky-400">{data.trustScore}<span className="text-sm font-normal text-slate-500">/100</span></p>
+            <p className="text-xs text-slate-500">{data.trustLevel.replace(/_/g, " ")}</p>
+          </div>
           <h2 className="text-2xl font-bold">{data.name}</h2>
           <p className="text-sm text-slate-500">{data.phone}</p>
           <div className="flex flex-wrap justify-center gap-1.5">
@@ -868,11 +1014,32 @@ function PublicVerifyScreen({ userId, onBack }: { userId: string; onBack: () => 
             {data.isAgent && !data.verified && <Badge variant="destructive">UNVERIFIED AGENT</Badge>}
             {data.revoked && <Badge variant="destructive">REVOKED</Badge>}
           </div>
-          <div className={`rounded-xl p-4 ${data.trustScore >= 50 && !data.revoked ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
-            <p className={`font-semibold ${data.trustScore >= 50 && !data.revoked ? "text-green-700" : "text-red-700"}`}>
-              {data.trustScore >= 50 && !data.revoked ? `✓ Safe to transact` : `⚠ Do NOT send money`}
+          <div className={`rounded-xl p-4 ${isSafe ? "bg-green-50 border border-green-200 dark:bg-green-950/30 dark:border-green-900" : "bg-red-50 border border-red-200 dark:bg-red-950/30 dark:border-red-900"}`}>
+            <p className={`font-semibold ${isSafe ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}>
+              {isSafe ? `✓ This profile looks trusted — safer to transact` : `⚠ Do not send money to this profile`}
             </p>
           </div>
+
+          {isSafe && (
+            <Card className="text-left">
+              <CardContent className="pt-5 space-y-3">
+                <p className="text-sm font-semibold text-[#003087] dark:text-sky-400 flex items-center gap-2">
+                  <Send className="w-4 h-4" /> Send money to {data.name}
+                </p>
+                <p className="text-xs text-slate-500">Recipient is loaded from this verified profile after you continue.</p>
+                {me ? (
+                  <Button className="w-full h-12 bg-[#003087] hover:bg-[#002060]" onClick={() => onSendMoney(userId)}>
+                    Continue to send money
+                  </Button>
+                ) : (
+                  <Button className="w-full h-12 bg-[#003087] hover:bg-[#002060]" onClick={() => onSignInToSend(userId)}>
+                    Sign in to send money
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <p className="text-xs text-slate-400">Member since {new Date(data.memberSince).toLocaleDateString()}</p>
         </div>
       )}
@@ -887,11 +1054,11 @@ function FaceLoginScreen({ userId, userName, onVerify, onBack, error }: { userId
   return (
     <Shell>
       <div className="text-center mt-4 mb-6">
-        <div className="w-16 h-16 mx-auto rounded-full bg-[#003087] flex items-center justify-center mb-3">
-          <ScanFace className="w-8 h-8 text-white" />
+        <div className="mx-auto mb-3 flex justify-center">
+          <IndentixLogo className="h-16 w-16" />
         </div>
-        <h2 className="text-xl font-bold text-[#003087]">Verify your identity</h2>
-        <p className="text-sm text-slate-500 mt-1">Hi {userName ?? "there"}! Scan your face to log in.</p>
+        <h2 className="text-xl font-bold text-[#003087] dark:text-sky-400">Verify your identity</h2>
+        <p className="text-sm text-slate-500 mt-1">Hi {userName ?? "there"}! Your face must match the one on file for this account before you can continue.</p>
       </div>
 
       {!scanning ? (
@@ -929,11 +1096,14 @@ function DemoScreen({ onBack, onLogin }: { onBack: () => void; onLogin: (ph: str
   return (
     <Shell>
       <BackButton onClick={onBack} />
-      <h2 className="text-xl font-bold text-[#003087] mb-1">Demo mode</h2>
+      <div className="flex items-center gap-2 mb-1">
+        <IndentixLogo className="h-10 w-10" />
+        <h2 className="text-xl font-bold text-[#003087] dark:text-sky-400">Demo mode</h2>
+      </div>
       <p className="text-sm text-slate-500 mb-4">Tap to login as any user.</p>
       <div className="space-y-2">
         {users.map((u) => (
-          <div key={u.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => onLogin(u.phone)}>
+          <div key={u.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" onClick={() => onLogin(u.phone)}>
             <div className="w-10 h-10 rounded-full bg-[#003087] flex items-center justify-center text-white text-xs font-bold">{u.name.split(" ").map(n => n[0]).join("")}</div>
             <div className="flex-1">
               <p className="text-sm font-semibold">{u.name}</p>

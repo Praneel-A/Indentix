@@ -28,3 +28,10 @@ export function averageEmbeddings(samples: number[][]): number[] {
 }
 
 export const MATCH_THRESHOLD = 0.35;
+
+/** Face-API.js single-face descriptor length; used to decide if login must run biometric check. */
+export const FACE_DESCRIPTOR_LENGTH = 128;
+
+export function hasStoredFaceDescriptor(embedding: number[] | null | undefined): boolean {
+  return Array.isArray(embedding) && embedding.length === FACE_DESCRIPTOR_LENGTH;
+}
