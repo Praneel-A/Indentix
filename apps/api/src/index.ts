@@ -1,3 +1,4 @@
+import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { store, type AppUser } from "./store.js";
@@ -8,6 +9,7 @@ import {
   MATCH_THRESHOLD,
   preciseEmbedding,
 } from "./lib/face.js";
+import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "./lib/password.js";
 
 const PORT = Number(process.env.PORT) || 4000;
 
@@ -18,17 +20,34 @@ async function main() {
   app.get("/", async () => ({ name: "Indentix API", status: "running" }));
   app.get("/health", async () => ({ ok: true }));
 
-  /* ── Auth: phone login with face gate ── */
+  /* ── Auth: register, password login, face gate ── */
 
-  app.post("/auth/login", async (request) => {
-    const { phone, name } = request.body as { phone?: string; name?: string };
-    if (!phone) return { error: "phone required" };
+  app.post("/auth/register", async (request, reply) => {
+    const { phone, name, password } = request.body as { phone?: string; name?: string; password?: string };
+    if (!phone?.trim()) return reply.status(400).send({ error: "Phone is required" });
+    if (!name?.trim()) return reply.status(400).send({ error: "Name is required" });
+    if (!password || password.length < MIN_PASSWORD_LENGTH) {
+      return reply.status(400).send({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+    }
+    const existing = await store.getByPhone(phone.trim());
+    if (existing) return reply.status(409).send({ error: "An account with this phone already exists. Sign in instead." });
+    const passwordHash = await hashPassword(password);
+    const user = await store.createUser(phone.trim(), name.trim(), passwordHash);
+    return { user: sanitize(user), requireFace: false };
+  });
 
-    let user = await store.getByPhone(phone);
+  app.post("/auth/login", async (request, reply) => {
+    const { phone, password } = request.body as { phone?: string; password?: string };
+    if (!phone?.trim()) return reply.status(400).send({ error: "Phone is required" });
 
+    const user = await store.getByPhone(phone.trim());
     if (!user) {
-      user = await store.createUser(phone, name ?? phone);
-      return { user: sanitize(user), requireFace: false };
+      return reply.status(404).send({ error: "No account for this phone. Create one with Sign up.", code: "NOT_FOUND" });
+    }
+
+    if (user.passwordHash) {
+      const ok = password && (await verifyPassword(password, user.passwordHash));
+      if (!ok) return reply.status(401).send({ error: "Invalid phone or password" });
     }
 
     if (user.faceHash) {
@@ -252,7 +271,7 @@ async function main() {
 function sanitize(u: AppUser | null) {
   if (!u) return null;
   return {
-    id: u.id, phone: u.phone, name: u.name, verified: u.verified,
+    id: u.id, phone: u.phone, name: u.name, passwordSet: Boolean(u.passwordHash), verified: u.verified,
     faceHash: u.faceHash, faceEnrolledAt: u.faceEnrolledAt,
     govIdUploaded: Boolean(u.govIdImage), govIdUploadedAt: u.govIdUploadedAt,
     onboarded: u.onboarded, balance: u.balance,

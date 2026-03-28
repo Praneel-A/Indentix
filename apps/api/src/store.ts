@@ -4,6 +4,7 @@ export interface AppUser {
   id: string;
   phone: string;
   name: string;
+  passwordHash: string | null;
   verified: boolean;
   faceEmbedding: number[] | null;
   faceHash: string | null;
@@ -36,7 +37,7 @@ function genId() { return Math.random().toString(36).slice(2, 10); }
 /* ── DB row <-> AppUser mapping ── */
 
 interface DbRow {
-  id: string; phone: string; name: string; verified: boolean;
+  id: string; phone: string; name: string; password_hash: string | null; verified: boolean;
   face_embedding: number[] | null; face_hash: string | null; face_enrolled_at: string | null;
   gov_id_image: string | null; gov_id_uploaded_at: string | null;
   onboarded: boolean; balance: number;
@@ -47,7 +48,7 @@ interface DbRow {
 
 function rowToUser(r: DbRow): AppUser {
   return {
-    id: r.id, phone: r.phone, name: r.name, verified: r.verified,
+    id: r.id, phone: r.phone, name: r.name, passwordHash: r.password_hash ?? null, verified: r.verified,
     faceEmbedding: r.face_embedding, faceHash: r.face_hash, faceEnrolledAt: r.face_enrolled_at,
     govIdImage: r.gov_id_image, govIdUploadedAt: r.gov_id_uploaded_at,
     onboarded: r.onboarded, balance: Number(r.balance),
@@ -61,6 +62,7 @@ function userToRow(u: Partial<AppUser> & { id: string }): Record<string, unknown
   const row: Record<string, unknown> = { id: u.id };
   if (u.phone !== undefined) row.phone = u.phone;
   if (u.name !== undefined) row.name = u.name;
+  if (u.passwordHash !== undefined) row.password_hash = u.passwordHash;
   if (u.verified !== undefined) row.verified = u.verified;
   if (u.faceEmbedding !== undefined) row.face_embedding = u.faceEmbedding;
   if (u.faceHash !== undefined) row.face_hash = u.faceHash;
@@ -82,17 +84,17 @@ function userToRow(u: Partial<AppUser> & { id: string }): Record<string, unknown
 /* ── In-memory fallback (for local dev without Supabase) ── */
 
 const DEMO_USERS: AppUser[] = [
-  { id: "user_praneel", phone: "+14703803242", name: "Praneel Anand", verified: true, faceEmbedding: null, faceHash: null, faceEnrolledAt: null, govIdImage: null, govIdUploadedAt: null, onboarded: true, balance: 1250000, trustScore: 92, trustLevel: "TRUSTED", isAgent: false, revoked: false, revokedAt: null, createdAt: "2025-01-15T08:00:00Z", transactions: [
+  { id: "user_praneel", phone: "+14703803242", name: "Praneel Anand", passwordHash: null, verified: true, faceEmbedding: null, faceHash: null, faceEnrolledAt: null, govIdImage: null, govIdUploadedAt: null, onboarded: true, balance: 1250000, trustScore: 92, trustLevel: "TRUSTED", isAgent: false, revoked: false, revokedAt: null, createdAt: "2025-01-15T08:00:00Z", transactions: [
     { id: "tx1", from: "+14703803242", to: "+255787654321", amount: 50000, currency: "TZS", status: "confirmed", timestamp: "2026-03-27T10:30:00Z" },
     { id: "tx2", from: "+255798888888", to: "+14703803242", amount: 25000, currency: "TZS", status: "confirmed", timestamp: "2026-03-26T14:15:00Z" },
     { id: "tx3", from: "+14703803242", to: "+255798888888", amount: 150000, currency: "TZS", status: "confirmed", timestamp: "2026-03-25T09:00:00Z" },
     { id: "tx4", from: "+255787654321", to: "+14703803242", amount: 75000, currency: "TZS", status: "confirmed", timestamp: "2026-03-24T16:45:00Z" },
     { id: "tx5", from: "+14703803242", to: "+255787654321", amount: 30000, currency: "TZS", status: "pending", timestamp: "2026-03-27T11:00:00Z" },
   ] },
-  { id: "user_juma", phone: "+255787654321", name: "Juma Bakari", verified: true, faceEmbedding: null, faceHash: null, faceEnrolledAt: null, govIdImage: null, govIdUploadedAt: null, onboarded: true, balance: 340000, trustScore: 75, trustLevel: "VERIFIED", isAgent: false, revoked: false, revokedAt: null, createdAt: "2025-06-01T10:00:00Z", transactions: [] },
-  { id: "user_scammer", phone: "+255700000000", name: "Unknown Caller", verified: false, faceEmbedding: null, faceHash: null, faceEnrolledAt: null, govIdImage: null, govIdUploadedAt: null, onboarded: false, balance: 0, trustScore: 5, trustLevel: "SCAMMER", isAgent: false, revoked: false, revokedAt: null, createdAt: "2026-03-20T12:00:00Z", transactions: [{ id: "tx6", from: "+255700000000", to: "+14703803242", amount: 500000, currency: "TZS", status: "fake", timestamp: "2026-03-27T09:00:00Z" }] },
-  { id: "user_fake_agent", phone: "+255711111111", name: "M-Pesa Agent (FAKE)", verified: false, faceEmbedding: null, faceHash: null, faceEnrolledAt: null, govIdImage: null, govIdUploadedAt: null, onboarded: false, balance: 50000, trustScore: 12, trustLevel: "UNVERIFIED", isAgent: true, revoked: false, revokedAt: null, createdAt: "2026-03-25T08:00:00Z", transactions: [] },
-  { id: "user_real_agent", phone: "+255798888888", name: "M-Pesa Agent Kariakoo", verified: true, faceEmbedding: null, faceHash: null, faceEnrolledAt: null, govIdImage: null, govIdUploadedAt: null, onboarded: true, balance: 5600000, trustScore: 88, trustLevel: "TRUSTED", isAgent: true, revoked: false, revokedAt: null, createdAt: "2024-11-01T08:00:00Z", transactions: [] },
+  { id: "user_juma", phone: "+255787654321", name: "Juma Bakari", passwordHash: null, verified: true, faceEmbedding: null, faceHash: null, faceEnrolledAt: null, govIdImage: null, govIdUploadedAt: null, onboarded: true, balance: 340000, trustScore: 75, trustLevel: "VERIFIED", isAgent: false, revoked: false, revokedAt: null, createdAt: "2025-06-01T10:00:00Z", transactions: [] },
+  { id: "user_scammer", phone: "+255700000000", name: "Unknown Caller", passwordHash: null, verified: false, faceEmbedding: null, faceHash: null, faceEnrolledAt: null, govIdImage: null, govIdUploadedAt: null, onboarded: false, balance: 0, trustScore: 5, trustLevel: "SCAMMER", isAgent: false, revoked: false, revokedAt: null, createdAt: "2026-03-20T12:00:00Z", transactions: [{ id: "tx6", from: "+255700000000", to: "+14703803242", amount: 500000, currency: "TZS", status: "fake", timestamp: "2026-03-27T09:00:00Z" }] },
+  { id: "user_fake_agent", phone: "+255711111111", name: "M-Pesa Agent (FAKE)", passwordHash: null, verified: false, faceEmbedding: null, faceHash: null, faceEnrolledAt: null, govIdImage: null, govIdUploadedAt: null, onboarded: false, balance: 50000, trustScore: 12, trustLevel: "UNVERIFIED", isAgent: true, revoked: false, revokedAt: null, createdAt: "2026-03-25T08:00:00Z", transactions: [] },
+  { id: "user_real_agent", phone: "+255798888888", name: "M-Pesa Agent Kariakoo", passwordHash: null, verified: true, faceEmbedding: null, faceHash: null, faceEnrolledAt: null, govIdImage: null, govIdUploadedAt: null, onboarded: true, balance: 5600000, trustScore: 88, trustLevel: "TRUSTED", isAgent: true, revoked: false, revokedAt: null, createdAt: "2024-11-01T08:00:00Z", transactions: [] },
 ];
 
 class MemStore {
@@ -117,9 +119,9 @@ export const store = {
     return data ? rowToUser(data as DbRow) : null;
   },
 
-  async createUser(phone: string, name: string): Promise<AppUser> {
+  async createUser(phone: string, name: string, passwordHash: string | null = null): Promise<AppUser> {
     const u: AppUser = {
-      id: `user_${genId()}`, phone, name, verified: false,
+      id: `user_${genId()}`, phone, name, passwordHash, verified: false,
       faceEmbedding: null, faceHash: null, faceEnrolledAt: null,
       govIdImage: null, govIdUploadedAt: null, onboarded: false,
       balance: 0, trustScore: 10, trustLevel: "UNVERIFIED",

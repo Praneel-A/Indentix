@@ -20,7 +20,7 @@ type Tx = {
 };
 
 type User = {
-  id: string; phone: string; name: string; verified: boolean;
+  id: string; phone: string; name: string; passwordSet?: boolean; verified: boolean;
   faceHash: string | null; faceEnrolledAt: string | null;
   govIdUploaded: boolean; govIdUploadedAt: string | null;
   onboarded: boolean; balance: number;
@@ -40,10 +40,14 @@ export function App() {
   const [pendingLoginUserId, setPendingLoginUserId] = useState<string | null>(null);
   const [pendingLoginUserName, setPendingLoginUserName] = useState<string | null>(null);
 
-  const login = async (ph: string, name?: string) => {
+  const login = async (ph: string, password?: string) => {
     setError(null);
-    const res = await api("/auth/login", { method: "POST", body: JSON.stringify({ phone: ph, name }) });
+    const res = await api("/auth/login", { method: "POST", body: JSON.stringify({ phone: ph, password: password ?? "" }) });
     const j = await res.json() as { user?: User; requireFace?: boolean; userId?: string; userName?: string; error?: string };
+    if (!res.ok) {
+      setError(j.error ?? "Login failed");
+      return;
+    }
     if (j.requireFace && j.userId) {
       setPendingLoginUserId(j.userId);
       setPendingLoginUserName(j.userName ?? null);
@@ -56,11 +60,29 @@ export function App() {
     }
   };
 
+  const register = async (name: string, ph: string, password: string) => {
+    setError(null);
+    const res = await api("/auth/register", { method: "POST", body: JSON.stringify({ phone: ph, name, password }) });
+    const j = await res.json() as { user?: User; error?: string };
+    if (!res.ok) {
+      setError(j.error ?? "Could not create account");
+      return;
+    }
+    if (j.user) {
+      setMe(j.user);
+      setScreen(j.user.onboarded ? "home" : "onboarding");
+    }
+  };
+
   const verifyFaceLogin = async (embedding: number[]) => {
     if (!pendingLoginUserId) return;
     setError(null);
     const res = await api("/auth/verify-face", { method: "POST", body: JSON.stringify({ userId: pendingLoginUserId, embedding }) });
     const j = await res.json() as { user?: User; verified?: boolean; error?: string; distance?: number };
+    if (!res.ok) {
+      setError(j.error ?? `Face mismatch (distance: ${j.distance ?? "?"}). Try again.`);
+      return;
+    }
     if (j.user && j.verified) {
       setMe(j.user);
       setPendingLoginUserId(null);
@@ -81,7 +103,7 @@ export function App() {
   const logout = () => { setMe(null); setScreen("login"); };
 
   if (screen === "public-verify" && publicVerifyId) return <PublicVerifyScreen userId={publicVerifyId} onBack={() => { setPublicVerifyId(null); setScreen(me ? "home" : "login"); }} />;
-  if (screen === "login") return <LoginScreen phone={phone} setPhone={setPhone} onLogin={(ph, name) => void login(ph, name)} onDemo={() => setScreen("demo")} error={error} />;
+  if (screen === "login") return <LoginScreen phone={phone} setPhone={setPhone} onLogin={(ph, pw) => void login(ph, pw)} onRegister={(name, ph, pw) => void register(name, ph, pw)} onClearError={() => setError(null)} onDemo={() => setScreen("demo")} error={error} />;
   if (screen === "face-login") return <FaceLoginScreen userId={pendingLoginUserId!} userName={pendingLoginUserName} onVerify={(emb) => void verifyFaceLogin(emb)} onBack={() => { setPendingLoginUserId(null); setScreen("login"); }} error={error} />;
   if (!me) return null;
   if (screen === "onboarding") return <OnboardingScreen me={me} onDone={() => { void refresh(); setScreen("home"); }} />;
@@ -90,7 +112,7 @@ export function App() {
   if (screen === "revoke") return <RevokeScreen me={me} onBack={() => { void refresh(); setScreen("home"); }} />;
   if (screen === "face-enroll") return <FaceEnrollScreen me={me} onDone={() => { void refresh(); setScreen("home"); }} />;
   if (screen === "face-verify") return <FaceVerifyScreen me={me} onDone={() => setScreen("home")} />;
-  if (screen === "demo") return <DemoScreen onBack={() => setScreen("login")} onLogin={(ph) => { void login(ph); }} />;
+  if (screen === "demo") return <DemoScreen onBack={() => setScreen("login")} onLogin={(ph) => { void login(ph, ""); }} />;
 
   /* Home / Wallet / Activity share the same bottom nav */
   return (
@@ -315,8 +337,29 @@ function BackButton({ onClick }: { onClick: () => void }) {
 }
 
 /* ── LOGIN ── */
-function LoginScreen({ phone, setPhone, onLogin, onDemo, error }: { phone: string; setPhone: (v: string) => void; onLogin: (ph: string, name?: string) => void; onDemo: () => void; error: string | null }) {
+function LoginScreen({ phone, setPhone, onLogin, onRegister, onClearError, onDemo, error }: {
+  phone: string; setPhone: (v: string) => void;
+  onLogin: (ph: string, password?: string) => void;
+  onRegister: (name: string, ph: string, password: string) => void;
+  onClearError: () => void;
+  onDemo: () => void; error: string | null;
+}) {
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+
+  const submit = () => {
+    if (mode === "signup") {
+      if (!name.trim()) return;
+      if (password.length < 8) return;
+      if (password !== confirm) return;
+      onRegister(name.trim(), phone, password);
+      return;
+    }
+    onLogin(phone, password);
+  };
+
   return (
     <Shell>
       <div className="text-center mb-8 mt-8">
@@ -326,18 +369,40 @@ function LoginScreen({ phone, setPhone, onLogin, onDemo, error }: { phone: strin
         <h1 className="text-2xl font-bold text-[#003087]">Indentix</h1>
         <p className="text-sm text-slate-500 mt-1">Trusted mobile payments for Tanzania</p>
       </div>
+      <div className="flex rounded-xl bg-slate-100 p-1 mb-4">
+        <button type="button" className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mode === "signin" ? "bg-white text-[#003087] shadow-sm" : "text-slate-500"}`} onClick={() => { setMode("signin"); onClearError(); }}>Sign in</button>
+        <button type="button" className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mode === "signup" ? "bg-white text-[#003087] shadow-sm" : "text-slate-500"}`} onClick={() => { setMode("signup"); onClearError(); }}>Sign up</button>
+      </div>
       <div className="space-y-4">
-        <div>
-          <label className="text-sm font-medium text-slate-700">Full name</label>
-          <Input className="mt-1.5 h-12 text-base" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Praneel Anand" />
-        </div>
+        {mode === "signup" && (
+          <div>
+            <label className="text-sm font-medium text-slate-700">Full name</label>
+            <Input className="mt-1.5 h-12 text-base" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Amina Juma" autoComplete="name" />
+          </div>
+        )}
         <div>
           <label className="text-sm font-medium text-slate-700">Phone number</label>
-          <Input className="mt-1.5 h-12 text-base" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+255…" />
+          <Input className="mt-1.5 h-12 text-base" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+255…" type="tel" autoComplete="tel" />
         </div>
-        <Button className="w-full h-12 text-base bg-[#003087] hover:bg-[#002060]" onClick={() => onLogin(phone, name || undefined)}>
-          <Phone className="w-4 h-4 mr-2" /> Sign in / Sign up
+        <div>
+          <label className="text-sm font-medium text-slate-700">Password</label>
+          <Input className="mt-1.5 h-12 text-base" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={mode === "signin" ? "Demo accounts: leave blank" : "At least 8 characters"} type="password" autoComplete={mode === "signup" ? "new-password" : "current-password"} />
+        </div>
+        {mode === "signup" && (
+          <div>
+            <label className="text-sm font-medium text-slate-700">Confirm password</label>
+            <Input className="mt-1.5 h-12 text-base" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Repeat password" type="password" autoComplete="new-password" />
+          </div>
+        )}
+        <Button
+          className="w-full h-12 text-base bg-[#003087] hover:bg-[#002060]"
+          onClick={submit}
+          disabled={mode === "signup" && (!name.trim() || password.length < 8 || password !== confirm)}
+        >
+          <Phone className="w-4 h-4 mr-2" /> {mode === "signin" ? "Sign in" : "Create account"}
         </Button>
+        {mode === "signup" && password.length > 0 && password.length < 8 && <p className="text-xs text-amber-600 text-center">Use at least 8 characters.</p>}
+        {mode === "signup" && confirm.length > 0 && password !== confirm && <p className="text-xs text-red-500 text-center">Passwords do not match.</p>}
         {error && <p className="text-xs text-red-500 text-center">{error}</p>}
         <div className="relative flex items-center gap-3 my-2">
           <div className="flex-1 h-px bg-slate-200" />

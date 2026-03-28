@@ -43,7 +43,9 @@ npm install && npm run dev:api & npm run dev:web
 
 Then open **http://localhost:5173**.
 
-No Docker. No blockchain. No environment variables. Just `npm install` and go.
+No Docker. No blockchain. **By default** the API uses an in-memory demo store (no env vars).
+
+**Optional — Supabase persistence:** copy `apps/api/.env.example` to `apps/api/.env`, set `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` (use the **service_role** secret from the Supabase dashboard for production; the publishable/anon key only works if RLS allows it). Then run the SQL in `apps/api/src/migrations/001_create_users.sql` in **Supabase → SQL Editor** so the `users` table exists. Set the same variables on Railway (or your host) for deployed APIs.
 
 ## Demo Script (2 minutes)
 
@@ -60,10 +62,10 @@ No Docker. No blockchain. No environment variables. Just `npm install` and go.
 
 ```
 apps/
-  api/          Fastify server (in-memory store, no database)
+  api/          Fastify server (in-memory or optional Supabase Postgres)
     src/
       index.ts    All endpoints in one file
-      store.ts    In-memory user store with demo data
+      store.ts    User store (memory fallback or Supabase `users` table)
       lib/face.ts Face comparison (Euclidean distance)
   web/          Vite + React + shadcn/ui + Tailwind
     src/
@@ -77,7 +79,9 @@ apps/
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/auth/login` | Login by phone number |
+| POST | `/auth/register` | Sign up (phone, name, password ≥8 chars, bcrypt hash stored) |
+| POST | `/auth/login` | Sign in (password required if account has one; demo users have no password) |
+| POST | `/auth/verify-face` | Complete login when face ID is enrolled |
 | GET | `/user/:id` | Get user profile |
 | GET | `/lookup/phone/:phone` | Look up user by phone |
 | POST | `/face/enroll` | Enroll face (5 samples) |
