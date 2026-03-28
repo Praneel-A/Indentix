@@ -15,6 +15,7 @@ async function main() {
   const app = Fastify({ logger: true });
   await app.register(cors, { origin: true, credentials: true });
 
+  app.get("/", async () => ({ name: "Indentix API", status: "running" }));
   app.get("/health", async () => ({ ok: true }));
 
   /* ── Auth (simplified — phone-based, no wallet) ── */
