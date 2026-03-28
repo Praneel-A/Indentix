@@ -34,6 +34,9 @@ export interface Transaction {
 
 function genId() { return Math.random().toString(36).slice(2, 10); }
 
+/** Starting balance (TZS) for every newly registered account. */
+export const DEFAULT_STARTING_BALANCE = 50_000;
+
 /* ── DB row <-> AppUser mapping ── */
 
 interface DbRow {
@@ -124,7 +127,7 @@ export const store = {
       id: `user_${genId()}`, phone, name, passwordHash, verified: false,
       faceEmbedding: null, faceHash: null, faceEnrolledAt: null,
       govIdImage: null, govIdUploadedAt: null, onboarded: false,
-      balance: 0, trustScore: 10, trustLevel: "UNVERIFIED",
+      balance: DEFAULT_STARTING_BALANCE, trustScore: 10, trustLevel: "UNVERIFIED",
       isAgent: false, revoked: false, revokedAt: null,
       createdAt: new Date().toISOString(), transactions: [],
     };

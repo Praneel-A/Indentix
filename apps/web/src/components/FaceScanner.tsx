@@ -190,7 +190,6 @@ export function FaceScanner({ mode, userId, onComplete, onClose, onCapture }: Pr
         holdCount.current = 0;
         setStatus("no-face");
         drawOval(ctx, cx, cy, ovalRx, ovalRy, "#94a3b8", true);
-        drawMsg(ctx, vw, vh, "Position your face in the oval", "#94a3b8");
         return;
       }
 
@@ -206,7 +205,6 @@ export function FaceScanner({ mode, userId, onComplete, onClose, onCapture }: Pr
         holdCount.current = 0;
         setStatus("move-closer");
         drawOval(ctx, cx, cy, ovalRx, ovalRy, "#f59e0b", true);
-        drawMsg(ctx, vw, vh, "Move closer", "#f59e0b");
         return;
       }
 
@@ -214,7 +212,6 @@ export function FaceScanner({ mode, userId, onComplete, onClose, onCapture }: Pr
         holdCount.current = 0;
         setStatus("ready");
         drawOval(ctx, cx, cy, ovalRx, ovalRy, "#f59e0b", true);
-        drawMsg(ctx, vw, vh, "Center your face", "#f59e0b");
         return;
       }
 
@@ -224,7 +221,6 @@ export function FaceScanner({ mode, userId, onComplete, onClose, onCapture }: Pr
 
       drawOval(ctx, cx, cy, ovalRx, ovalRy, "#22c55e", false);
       drawOvalArc(ctx, cx, cy, ovalRx, ovalRy, frac);
-      drawMsg(ctx, vw, vh, "Hold still…", "#22c55e");
 
       if (holdCount.current >= HOLD_FRAMES && !fired.current) {
         void fire();
@@ -295,10 +291,10 @@ export function FaceScanner({ mode, userId, onComplete, onClose, onCapture }: Pr
       {modelsLoaded && !cameraError && (
         <div className="max-w-[400px] mx-auto mt-3 text-center space-y-2">
           <Progress value={progress} />
-          <p className="text-sm text-slate-500">
+          <p className="text-sm font-medium text-slate-700">
             {status === "init" && "Starting camera…"}
-            {status === "ready" && "Position your face in the oval"}
-            {status === "no-face" && "No face detected"}
+            {status === "ready" && "Center your face in the oval"}
+            {status === "no-face" && "Position your face in the oval"}
             {status === "move-closer" && "Move closer to the camera"}
             {status === "hold-still" && "Hold still…"}
             {status === "scanning" && (mode === "enroll" ? "Creating identity…" : "Verifying…")}
@@ -365,25 +361,6 @@ function drawLandmarks(ctx: CanvasRenderingContext2D, points: faceapi.Point[], t
     if ([36, 42, 48, 60].includes(g.s)) ctx.closePath();
     ctx.stroke();
   }
-}
-
-function drawMsg(ctx: CanvasRenderingContext2D, w: number, h: number, text: string, color: string) {
-  ctx.save();
-  ctx.font = "600 15px system-ui, sans-serif";
-  ctx.textAlign = "center";
-  const m = ctx.measureText(text);
-  const pw = 14;
-  const bw = m.width + pw * 2;
-  const bh = 30;
-  const bx = (w - bw) / 2;
-  const by = h - 44;
-  ctx.fillStyle = "rgba(15,23,42,0.75)";
-  ctx.beginPath();
-  ctx.roundRect(bx, by, bw, bh, 8);
-  ctx.fill();
-  ctx.fillStyle = color;
-  ctx.fillText(text, w / 2, by + 21);
-  ctx.restore();
 }
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }

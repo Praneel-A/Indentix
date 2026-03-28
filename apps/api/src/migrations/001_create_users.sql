@@ -11,7 +11,7 @@ create table if not exists users (
   gov_id_image text,
   gov_id_uploaded_at timestamptz,
   onboarded boolean default false,
-  balance numeric default 0,
+  balance numeric default 50000,
   trust_score integer default 10,
   trust_level text default 'UNVERIFIED',
   is_agent boolean default false,

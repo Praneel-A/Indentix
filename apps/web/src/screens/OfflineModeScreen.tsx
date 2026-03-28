@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, RefreshCw, WifiOff } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronLeft, RefreshCw, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cachedIdentities, pendingQueue, recentReports } from "@/data/mock";
@@ -20,7 +20,11 @@ export function OfflineModeScreen({ onNavigate, connectivity, lastSynced }: Prop
         : { wrap: "bg-slate-50", border: "border-slate-200", sub: "text-slate-600", pill: "bg-[#003087]/10 text-[#003087]" };
 
   return (
-    <div className="px-5 pb-6 pt-6">
+    <div className="px-5 pb-6 pt-4">
+      <button type="button" onClick={() => onNavigate("home")} className="mb-4 flex items-center gap-1 text-sm font-medium text-[#003087] hover:underline">
+        <ChevronLeft className="h-4 w-4" aria-hidden />
+        Back
+      </button>
       <div className={`rounded-xl border p-5 ${hero.border} ${hero.wrap}`}>
         <div
           className={`flex h-12 w-12 items-center justify-center rounded-lg ${
