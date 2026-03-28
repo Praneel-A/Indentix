@@ -6,15 +6,9 @@
   ],
   "scripts": {
     "dev:api": "npm run dev -w @indentix/api",
-    "dev:web": "npm run dev -w @indentix/web",
-    "build:contracts": "cd contracts && forge build",
-    "db:up": "docker compose up -d",
-    "db:down": "docker compose down"
+    "dev:web": "npm run dev -w @indentix/web"
   },
   "engines": {
     "node": ">=20"
-  },
-  "devDependencies": {
-    "@esbuild/darwin-arm64": "^0.27.4"
   }
 }
